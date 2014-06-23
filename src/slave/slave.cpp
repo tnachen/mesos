@@ -2417,7 +2417,7 @@ void Slave::executorLaunched(
     const FrameworkID& frameworkId,
     const ExecutorID& executorId,
     const ContainerID& containerId,
-    const Future<Nothing>& future)
+    const Future<bool>& future)
 {
   if (!future.isReady()) {
     // The containerizer will clean up if the launch fails we'll just log this
@@ -2427,6 +2427,12 @@ void Slave::executorLaunched(
                << "' of framework '" << frameworkId
                << "' failed to start: "
                << (future.isFailed() ? future.failure() : " future discarded");
+    return;
+  } else if (future.get()) {
+    LOG(ERROR) << "Container '" << containerId
+               << "' for executor '" << executorId
+               << "' of framework '" << frameworkId
+               << "' failed to start: TaskInfo/ExecutorInfo not supported";
     return;
   }
 
@@ -3471,7 +3477,7 @@ Executor* Framework::launchExecutor(
   }
 
   // Launch the container.
-  Future<Nothing> launch;
+  Future<bool> launch;
   if (!executor->commandExecutor) {
     // If the executor is _not_ a command executor, this means that
     // the task will include the executor to run. The actual task to
