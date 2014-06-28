@@ -180,6 +180,7 @@ TEST_F(DockerContainerizerTest, DOCKER_Usage)
   ASSERT_SOME(master);
 
   slave::Flags flags = CreateSlaveFlags();
+  flags.resources = Option<string>("cpus:2;mem:1024");
 
   Docker docker("docker");
 
@@ -245,9 +246,17 @@ TEST_F(DockerContainerizerTest, DOCKER_Usage)
 
   usage = dockerContainer.usage(dockerContainer.lastContainerId);
   AWAIT_READY(usage);
-  // TODO(yifan): Verify the usage.
+
+  // Verify the usage.
+  EXPECT_EQ(2, usage.get().cpus_limit());
+  EXPECT_EQ(1024*1024*1024, usage.get().mem_limit_bytes());
+
+  Future<containerizer::Termination> termination =
+    dockerContainer.wait(dockerContainer.lastContainerId);
 
   dockerContainer.destroy(dockerContainer.lastContainerId);
+
+  AWAIT_READY(termination);
 
   // Usage() should fail again since the container is destroyed
   usage = dockerContainer.usage(dockerContainer.lastContainerId);
