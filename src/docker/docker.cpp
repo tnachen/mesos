@@ -84,7 +84,7 @@ Future<Option<int> > Docker::run(
     const string& name,
     const mesos::Resources& resources) const
 {
-    CHECK(resources.size() != 0);
+  CHECK(resources.size() != 0);
 
   string cmd = " run -d";
 
