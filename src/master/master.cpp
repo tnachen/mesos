@@ -455,7 +455,7 @@ void Master::initialize()
   // Initialize the allocator.
   allocator->initialize(flags, self(), roleInfos);
 
-  // Parse the white list
+  // Parse the white list.
   whitelistWatcher = new WhitelistWatcher(flags.whitelist, allocator);
   spawn(whitelistWatcher);
 
@@ -3688,7 +3688,7 @@ void Master::authenticationTimeout(Future<Option<string> > future)
 }
 
 
-// Return connected frameworks that are not in the process of being removed
+// Return connected frameworks that are not in the process of being removed.
 vector<Framework*> Master::getActiveFrameworks() const
 {
   vector <Framework*> result;
