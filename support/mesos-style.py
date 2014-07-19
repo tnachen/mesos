@@ -12,6 +12,7 @@ import sys
 active_rules = ['build/class',
                 'build/deprecated',
                 'build/endif_comment',
+                'readability/ending_punctuation',
                 'readability/todo',
                 'readability/namespace',
                 'runtime/vlog',

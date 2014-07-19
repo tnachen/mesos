@@ -29,6 +29,7 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 # Modified by Adam B (adam@mesosphere.io) to handle hpp files.
+# Modified by Tim C (tim@mesosphere.io) to handle comment punctuation.
 
 """Does google-lint on c++ files.
 
@@ -1513,6 +1514,50 @@ def CheckForNewlineAtEOF(filename, lines, error):
     error(filename, len(lines) - 2, 'whitespace/ending_newline', 5,
           'Could not find a newline character at the end of the file.')
 
+def _CheckCommentLine(line):
+  if line[-1].isalpha():
+    # Ignore if the last segment of the line is a url, path or param.
+    stripped = line[line.find('//')+2:].strip()
+    last = stripped.split(" ")[-1]
+    if not ((last.startswith("/") or last.startswith("--") or "://" in last)):
+      return False
+  return True
+
+def CheckForCommentsEndingInPunctuation(filename, clean_lines, error):
+  """Logs an error if end of single line comments is an alphabetical character
+
+  Args:
+    filename: The name of the current file.
+    clean_lines: A CleansedLines instance containing the file.
+    error: The function to call with any errors found.
+  """
+
+  in_comments = False
+  previous_line = None
+  num_lines = len(clean_lines.lines_without_raw_strings)
+  for i in range(0, num_lines):
+      line = clean_lines.lines_without_raw_strings[i]
+      if i == 0 or i == (num_lines - 1) or line == "// dummy" or \
+         line.startswith("#endif") or line.startswith("#else"):
+        continue
+
+      commentpos = line.find('//')
+      if commentpos != -1:
+        in_comments = True
+      elif in_comments:
+        in_comments = False
+        if not _CheckCommentLine(previous_line):
+          error(filename, i, 'readability/ending_punctuation', 3,
+                'Comment should end in non-alphabetical character.\n Line: ' +
+                previous_line + '\n')
+      else:
+        in_comments = False
+      previous_line = line
+
+  if in_comments and previous_line and not _CheckCommentLine(previous_line):
+    error(filename, num_lines, 'readability/ending_punctuation', 3,
+                'Comment should end in non-alphabetical character.\n Line: ' +
+                previous_line + '\n')
 
 def CheckForMultilineCommentsAndStrings(filename, clean_lines, linenum, error):
   """Logs an error if we see /* ... */ or "..." that extend past one line.
@@ -4564,6 +4609,8 @@ def ProcessFileData(filename, file_extension, lines, error,
   nesting_state.CheckCompletedBlocks(filename, error)
 
   CheckForIncludeWhatYouUse(filename, clean_lines, include_state, error)
+
+  CheckForCommentsEndingInPunctuation(filename, clean_lines, error)
 
   # We check here rather than inside ProcessLine so that we see raw
   # lines rather than "cleaned" lines.

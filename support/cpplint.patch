@@ -1,33 +1,85 @@
---- support/cpplint.py.orig	2014-07-16 15:35:35.000000000 -0700
-+++ support/cpplint.py	2014-07-16 15:57:34.000000000 -0700
-@@ -28,6 +28,8 @@
+--- support/cpplint.py.orig	2014-07-19 01:24:59.000000000 -0700
++++ support/cpplint.py	2014-07-19 01:42:52.000000000 -0700
+@@ -28,2 +28,2 @@
  # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
  # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- 
+
 +# Modified by Adam B (adam@mesosphere.io) to handle hpp files.
-+
++# Modified by Tim C (tim@mesosphere.io) to handle comment punctuation.
  """Does google-lint on c++ files.
- 
+
  The goal of this script is to identify places in the code that *may*
 @@ -71,7 +73,7 @@
    suppresses errors of all categories on that line.
- 
+
    The files passed in will be linted; at least one file must be provided.
 -  Default linted extensions are .cc, .cpp, .cu, .cuh and .h.  Change the
 +  Default linted extensions are .cc, .cpp, .cu, .cuh, .hpp and .h.  Change the
    extensions with the --extensions flag.
- 
+
    Flags:
 @@ -449,7 +451,7 @@
- 
+
  # The allowed extensions for file names
  # This is set by --extensions flag.
 -_valid_extensions = set(['cc', 'h', 'cpp', 'cu', 'cuh'])
 +_valid_extensions = set(['cc', 'h', 'cpp', 'cu', 'cuh', 'hpp'])
- 
+
  def ParseNolintSuppressions(filename, raw_line, linenum, error):
    """Updates the global list of error-suppressions.
-@@ -1775,16 +1777,16 @@
+@@ -1511,2 +1513,2 @@
+     error(filename, len(lines) - 2, 'whitespace/ending_newline', 5,
+           'Could not find a newline character at the end of the file.')
+
++def _CheckCommentLine(line):
++  if line[-1].isalpha():
++    # Ignore if the last segment of the line is a url or path
++    stripped = line[line.find('//')+2:].strip()
++    last = stripped.split(" ")[-1]
++    if not ((last.startswith("/") or last.startswith("--") or "://" in last)):
++      return False
++  return True
++
++def CheckForCommentsEndingInPunctuation(filename, clean_lines, error):
++  """Logs an error if end of single line comments is an alphabetical character
++
++  Args:
++    filename: The name of the current file.
++    clean_lines: A CleansedLines instance containing the file.
++    error: The function to call with any errors found.
++  """
++
++  in_comments = False
++  previous_line = None
++  num_lines = len(clean_lines.lines_without_raw_strings)
++  for i in range(0, num_lines):
++      line = clean_lines.lines_without_raw_strings[i]
++      if i == 0 or i == (num_lines - 1) or line == "// dummy" or \
++         line.startswith("#endif") or line.startswith("#else"):
++        continue
++
++      commentpos = line.find('//')
++      if commentpos != -1:
++        in_comments = True
++      elif in_comments:
++        in_comments = False
++        if not _CheckCommentLine(previous_line):
++          error(filename, i, 'readability/ending_punctuation', 3,
++                'Comment should end in non-alphabetical character. \n Line: ' +
++                previous_line + '\n')
++      else:
++        in_comments = False
++      previous_line = line
++
++  if in_comments and previous_line and not _CheckCommentLine(previous_line):
++    error(filename, len(clean_lines), 'readability/ending_punctuation', 3,
++                'Comment should end in non-alphabetical character. \n Line: ' +
++                previous_line + '\n')
+
+
+ def CheckForMultilineCommentsAndStrings(filename, clean_lines, linenum, error):
+   """Logs an error if we see /* ... */ or "..." that extend past one line.
+@@ -1775,16 +1821,16 @@
      if self.name:
        # Named namespace
        if not Match((r'};*\s*(//|/\*).*\bnamespace\s+' + re.escape(self.name) +
@@ -48,10 +100,10 @@
 
 
  class _PreprocessorInfo(object):
-@@ -1993,11 +1995,9 @@
+@@ -1993,11 +2039,9 @@
        if access_match:
          classinfo.access = access_match.group(2)
- 
+
 -        # Check that access keywords are indented +1 space.  Skip this
 -        # check if the keywords are not preceded by whitespaces.
 +        # Check that access keywords are not indented.
@@ -62,17 +114,17 @@
            if classinfo.is_struct:
              parent = 'struct ' + classinfo.name
            else:
-@@ -2006,7 +2006,7 @@
+@@ -2006,7 +2050,7 @@
            if access_match.group(3):
              slots = access_match.group(3)
            error(filename, linenum, 'whitespace/indent', 3,
 -                '%s%s: should be indented +1 space inside %s' % (
 +                '%s%s: should not be indented inside %s' % (
                      access_match.group(2), slots, parent))
- 
+
      # Consume braces or semicolons from what's left of the line
-@@ -3400,7 +3400,7 @@
- 
+@@ -3400,7 +3444,7 @@
+
    # Check if the line is a header guard.
    is_header_guard = False
 -  if file_extension == 'h':
@@ -80,16 +132,16 @@
      cppvar = GetHeaderGuardCPPVariable(filename)
      if (line.startswith('#ifndef %s' % cppvar) or
          line.startswith('#define %s' % cppvar) or
-@@ -3867,7 +3867,7 @@
+@@ -3867,7 +3911,7 @@
      error(filename, linenum, 'runtime/init', 4,
            'You seem to be initializing a member variable with itself.')
- 
+
 -  if file_extension == 'h':
 +  if (file_extension == 'h' or file_extension == 'hpp'):
      # TODO(unknown): check that 1-arg constructors are explicit.
      #                How to tell it's a constructor?
      #                (handled in CheckForNonStandardConstructs for now)
-@@ -4011,7 +4011,7 @@
+@@ -4011,7 +4055,7 @@
    # Check for use of unnamed namespaces in header files.  Registration
    # macros are typically OK, so we allow use of "namespace {" on lines
    # that end with backslashes.
@@ -98,12 +150,21 @@
        and Search(r'\bnamespace\s*{', line)
        and line[-1] != '\\'):
      error(filename, linenum, 'build/namespaces', 4,
-@@ -4552,7 +4552,7 @@
- 
+@@ -4552,7 +4596,7 @@
+
    CheckForCopyright(filename, lines, error)
- 
+
 -  if file_extension == 'h':
 +  if (file_extension == 'h' or file_extension == 'hpp'):
      CheckForHeaderGuard(filename, lines, error)
- 
+
    RemoveMultiLineComments(filename, lines, error)
+@@ -4565,0 +4609,0 @@
+
+   CheckForIncludeWhatYouUse(filename, clean_lines, include_state, error)
+
++  CheckForCommentsEndingInPunctuation(filename, clean_lines, error)
++
+   # We check here rather than inside ProcessLine so that we see raw
+   # lines rather than "cleaned" lines.
+   CheckForBadCharacters(filename, lines, error)
