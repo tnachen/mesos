@@ -30,20 +30,19 @@ source_dirs = ['src',
 # Add file paths and patterns which should not be checked
 # This should include 3rdparty libraries, includes and machine generated
 # source.
-exclude_files = '(protobuf\-2\.4\.1|gmock\-1\.6\.0|glog\-0\.3\.3|boost\-1\.53\.0|libev\-4\.15|java/jni|\.pb\.cc|\.pb\.h)'
+exclude_file_regex = re.compile(r'(protobuf\-2\.4\.1|gmock\-1\.6\.0|glog\-0\.3\.3|boost\-1\.53\.0|libev\-4\.15|java/jni|\.pb\.cc|\.pb\.h)')
 
-source_files = '\.(cpp|hpp|cc|h)$'
+source_criteria_regex = re.compile(r'\.(cpp|hpp|cc|h)$')
+
+def is_candidate(path):
+    return exclude_file_regex.search(path) is None and \
+           source_criteria_regex.search(path) is not None
 
 def find_candidates(root_dir):
-    exclude_file_regex = re.compile(exclude_files)
-    source_criteria_regex = re.compile(source_files)
     for root, dirs, files in os.walk(root_dir):
         for name in files:
             path = os.path.join(root, name)
-            if exclude_file_regex.search(path) is not None:
-                continue
-
-            if source_criteria_regex.search(name) is not None:
+            if is_candidate(path):
                 yield path
 
 def run_lint(source_paths):
@@ -78,12 +77,34 @@ if __name__ == '__main__':
 
     # Add all source file candidates to candidates list.
     candidates = []
+
+    if len(sys.argv) == 1:
+        # only run lint on changed files
+        p1 = subprocess.Popen(
+            ['git', 'diff', 'HEAD^', '--name-only'],
+            stdout=subprocess.PIPE,
+            close_fds=True)
+        p2 = subprocess.Popen(
+           ['cat'],
+            stdin=p1.stdout, stdout=subprocess.PIPE,
+            close_fds=True)
+        out, err = p2.communicate()
+        for line in out.split(os.linesep):
+            if is_candidate(line):
+                candidates.append(line)
+
+        if len(candidates) == 0:
+            print "No files to lint\n"
+            sys.exit(0)
+
+        sys.exit(run_lint(candidates))
+
     for source_dir in source_dirs:
         for candidate in find_candidates(source_dir):
             candidates.append(candidate)
 
-    if len(sys.argv) == 1:
-        # No file paths specified, run lint on all candidates.
+    if len(sys.argv) == 2 and sys.argv[1] == 'all':
+        # run lint on all candidates.
         sys.exit(run_lint(candidates))
     else:
         # File paths specified, run lint on all file paths that are candidates.
