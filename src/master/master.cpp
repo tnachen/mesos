@@ -841,15 +841,12 @@ void Master::visit(const MessageEvent& event)
 
   CHECK_SOME(recovered);
 
-  // All messages are filtered while recovering.
-  // TODO(bmahler): Consider instead re-enqueing *all* messages
-  // through recover(). What are the performance implications of
-  // the additional queueing delay and the accumulated backlog
-  // of messages post-recovery?
+  // All messages are queued while recovering.
   if (!recovered.get().isReady()) {
-    VLOG(1) << "Dropping '" << event.message->name << "' message since "
+    VLOG(1) << "Queueing '" << event.message->name << "' message since "
             << "not recovered yet";
-    ++metrics.dropped_messages;
+    // Should we make this bounded to a certain size?
+    messageEventsQueue.push(event);
     return;
   }
 

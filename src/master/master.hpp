@@ -752,6 +752,10 @@ private:
   // The default limiter is for frameworks not specified in
   // 'flags.rate_limits'.
   Option<process::Owned<process::RateLimiter> > defaultLimiter;
+
+  // Queue that holds messages while the master is in recovery.
+  // These messages will be replayed once the master is finished recovering.
+  std::queue<MessageEvent> messageEventsQueue;
 };
 
 
