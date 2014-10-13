@@ -16,12 +16,95 @@
 
 #include <cstdlib> // For rand().
 #include <string>
+#include <vector>
 
 #include <stout/bytes.hpp>
 #include <stout/gtest.hpp>
 #include <stout/svn.hpp>
+#include <stout/stopwatch.hpp>
 
 using std::string;
+using std::vector;
+
+struct Size {
+  int diff;
+  int orig;
+  Duration duration;
+};
+
+
+const int STEP = 16 * 1024;
+
+
+static void benchDiff(int size, double diffPercent, bool silent)
+{
+  vector<Size*> all;
+  for(int i = 0; i < size / STEP; ++i) {
+    Size* s = new Size();
+    all.push_back(s);
+  }
+  int tries = 50;
+  if (!silent) {
+    std::cout << "Benchmarking with max size: " << Bytes(size)
+              << " and percent modified: " << stringify(diffPercent)
+              << ", Averaging over " << stringify(tries) << " trials"
+              << std::endl;
+  }
+
+
+  int current = 1;
+  while(current <= tries) {
+    int count = 0;
+    int currentSize = STEP;
+    while(currentSize <= size) {
+      string source;
+
+      while (Bytes(source.size()) < Bytes(currentSize)) {
+        source += (char) rand() % 256;
+      }
+
+      string target = source;
+      int maxOffset = currentSize / 2 + currentSize * diffPercent;
+
+      for(int i = currentSize / 2; i < maxOffset && i < currentSize; ++i) {
+        target[i] = (char) rand() % 256;
+      }
+
+      Stopwatch stopwatch;
+      stopwatch.start();
+
+      Try<svn::Diff> diff = svn::diff(source, target);
+
+      stopwatch.stop();
+
+      ASSERT_SOME(diff);
+
+
+      Size* s = all[count];
+      s->diff = diff.get().data.size();
+      s->orig = currentSize;
+      if (current == 1) {
+        s->duration = stopwatch.elapsed();
+      } else {
+        s->duration += stopwatch.elapsed();
+      }
+
+      currentSize += STEP;
+      count++;
+    }
+    current++;
+  }
+
+  if (!silent) {
+    foreach(Size* size, all) {
+      int cost =
+        (size->duration.ns() / tries) + (size->diff * 2.119) +
+        (size->diff * 0.5);
+      std::cout << cost << std::endl;
+      delete size;
+    }
+  }
+}
 
 
 TEST(SVN, DiffPatch)
@@ -49,4 +132,14 @@ TEST(SVN, DiffPatch)
 
   ASSERT_SOME_EQ(target, result);
   ASSERT_SOME_NE(source, result);
+}
+
+
+TEST(SVN, BENCHMARK_DiffPerf)
+{
+  benchDiff(1024 * 8, 0.1, true);
+
+  for (double i = 0.1; i <= 0.3; i += 0.05) {
+    benchDiff(1024 * 1024, i, false);
+  }
 }
