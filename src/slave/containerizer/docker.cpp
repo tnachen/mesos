@@ -26,6 +26,7 @@
 #include <process/io.hpp>
 #include <process/reap.hpp>
 #include <process/subprocess.hpp>
+#include <process/timer.hpp>
 
 #include <stout/hashmap.hpp>
 #include <stout/hashset.hpp>
@@ -204,6 +205,13 @@ private:
   // container destroy.
   void reaped(const ContainerID& containerId);
 
+  // Schedule a docker container to be cleaned after a period of time.
+  void scheduleCleanup(const Duration& d, const std::string& container);
+
+  // Callback from the timer to clean up all docker containers
+  // scheduled in that timeout.
+  void cleanup(const Timeout& removalTime);
+
   const Flags flags;
 
   Docker docker;
@@ -372,6 +380,12 @@ private:
   };
 
   hashmap<ContainerID, Container*> containers_;
+
+  Timer timer;
+
+  // Holds all the containers that is scheduled to be cleaned up after
+  // destroy.
+  Multimap<process::Timeout, std::string> destroyedContainers;
 };
 
 
@@ -1522,8 +1536,16 @@ void DockerContainerizerProcess::_destroy(
 
   LOG(INFO) << "Running docker kill on container '" << containerId << "'";
 
-  docker.kill(container->name(), true)
-    .onAny(defer(self(), &Self::__destroy, containerId, killed, lambda::_1));
+  if (killed) {
+    docker.kill(container->name(), true)
+      .onAny(defer(self(), &Self::__destroy, containerId, killed, lambda::_1));
+  } else {
+    // If the container exited normally, skip docker kill so logs can
+    // still finish forwarding from the container. This is due to
+    // a docker bug that is sometimes not writing out stdout output
+    //if kill/stop is called on an already exited container.
+    __destroy(containerId, killed, Nothing());
+  }
 }
 
 
@@ -1547,6 +1569,9 @@ void DockerContainerizerProcess::__destroy(
         (kill.isFailed() ? kill.failure() : "discarded future"));
 
     containers_.erase(containerId);
+
+    scheduleCleanup(flags.gc_delay, container->name());
+
     delete container;
 
     return;
@@ -1582,6 +1607,9 @@ void DockerContainerizerProcess::___destroy(
   container->termination.set(termination);
 
   containers_.erase(containerId);
+
+  scheduleCleanup(flags.gc_delay, container->name());
+
   delete container;
 }
 
@@ -1602,6 +1630,36 @@ void DockerContainerizerProcess::reaped(const ContainerID& containerId)
 
   // The executor has exited so destroy the container.
   destroy(containerId, false);
+}
+
+
+void DockerContainerizerProcess::scheduleCleanup(
+    const Duration& d,
+    const string& container)
+{
+  Timeout removalTime = Timeout::in(d);
+
+  destroyedContainers.put(removalTime, container);
+
+  // If the timer is not yet initialized or the timeout is sooner than
+  // the currently active timer, update it.
+  if (timer.timeout().remaining() == Seconds(0) ||
+      removalTime < timer.timeout()) {
+    Timer::cancel(timer); // Cancel the existing timer, if any.
+
+    timer = delay(removalTime.remaining(), self(), &Self::cleanup, removalTime);
+  }
+}
+
+
+void DockerContainerizerProcess::cleanup(const Timeout& removalTime)
+{
+  foreach (const string& container, destroyedContainers.get(removalTime)) {
+    VLOG(1) << "Removing docker container: " << container;
+    docker.rm(container, true);
+  }
+
+  destroyedContainers.remove(removalTime);
 }
 
 
