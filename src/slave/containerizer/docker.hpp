@@ -317,7 +317,7 @@ private:
 
     std::string name()
     {
-      return DOCKER_NAME_PREFIX + stringify(id);
+      return DOCKER_NAME_PREFIX + slaveId.value() + "/" + stringify(id);
     }
 
     std::string image() const
