@@ -541,6 +541,7 @@ liblog_la_SOURCES =							\
   log/coordinator.cpp							\
   log/leveldb.cpp							\
   log/log.cpp								\
+  log/raft/consensus.cpp                                                \
   log/recover.cpp							\
   log/replica.cpp							\
   log/tool/benchmark.cpp						\
@@ -554,6 +555,7 @@ liblog_la_SOURCES +=							\
   log/leveldb.hpp							\
   log/log.hpp								\
   log/network.hpp							\
+  log/raft/consensus.hpp                                                \
   log/recover.hpp							\
   log/replica.hpp							\
   log/storage.hpp							\
