@@ -192,6 +192,16 @@ private:
       const ContainerID& containerId);
 
   // NOTE: This continuation is only applicable when launching a
+  // container for a task.
+  process::Future<Nothing> ___launchInContainer(
+      const ContainerID& containerId);
+
+  // NOTE: This continuation is only applicable when launching a
+  // container for a task.
+  process::Future<pid_t> ____launchInContainer(
+      const ContainerID& containerId);
+
+  // NOTE: This continuation is only applicable when launching a
   // container for an executor.
   process::Future<Docker::Container> ____launch(
       const ContainerID& containerId);
@@ -202,7 +212,17 @@ private:
       const ContainerID& containerId,
       const Docker::Container& container);
 
-  process::Future<bool> ______launch(
+  process::Future<pid_t> ______launch(
+      const ContainerID& containerId,
+      pid_t pid);
+
+  // NOTE: This continuation is only applicable when launching a
+  // container for a task.
+  process::Future<pid_t> ______launchInContainer(
+      const ContainerID& containerId,
+      pid_t pid);
+
+  process::Future<bool> _______launch(
     const ContainerID& containerId,
     pid_t pid);
 
@@ -318,6 +338,16 @@ private:
     std::string name()
     {
       return DOCKER_NAME_PREFIX + slaveId.value() + "/" + stringify(id);
+    }
+
+    std::string logName()
+    {
+      return name() + "/log";
+    }
+
+    std::string executorName()
+    {
+      return name() + "/executor";
     }
 
     std::string image() const
