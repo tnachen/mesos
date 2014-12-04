@@ -182,6 +182,7 @@ private:
       pid_t pid);
 
   process::Future<Nothing> _recover(
+      const state::SlaveState& state,
       const std::list<Docker::Container>& containers);
 
   process::Future<Nothing> _launch(
@@ -268,6 +269,14 @@ private:
 
   // Removes the docker container.
   void remove(const std::string& container);
+
+  Try<bool> recoverContainer(
+      const ContainerID& containerId,
+      const SlaveID& slaveId,
+      pid_t executorPid,
+      hashmap<ContainerID, const Docker::Container*>& containers,
+      hashmap<ContainerID, const Docker::Container*>& executors,
+      hashset<pid_t>& pids);
 
   const Flags flags;
 

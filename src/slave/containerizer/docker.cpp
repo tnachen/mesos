@@ -113,10 +113,35 @@ Option<ContainerID> parse(const Docker::Container& container)
       ContainerID id;
       id.set_value(parts[1]);
       return id;
+    } else if (parts.size() == 3) {
+      // We found a executor or log container.
+      ContainerID id;
+      id.set_value(parts[2]);
+      return id;
     }
   }
 
   return None();
+}
+
+
+// Launches a docker wait process on given container name.
+// Returns the wait process pid.
+Try<pid_t> launchWaitProcess(const string& docker, const string& name)
+{
+  string command = "exit `" + docker + " wait " + name + "`";
+
+  Try<Subprocess> wait = subprocess(
+      command,
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PATH("/dev/null"));
+
+  if (wait.isError()) {
+    return Error("Unable to launch docker wait on executor: " + wait.error());
+  }
+
+  return wait.get().pid();
 }
 
 
@@ -443,89 +468,8 @@ Future<Nothing> DockerContainerizerProcess::recover(
   LOG(INFO) << "Recovering Docker containers";
 
   if (state.isSome()) {
-    // Collection of pids that we've started reaping in order to
-    // detect very unlikely duplicate scenario (see below).
-    hashmap<ContainerID, pid_t> pids;
-
-    foreachvalue (const FrameworkState& framework, state.get().frameworks) {
-      foreachvalue (const ExecutorState& executor, framework.executors) {
-        if (executor.info.isNone()) {
-          LOG(WARNING) << "Skipping recovery of executor '" << executor.id
-                       << "' of framework " << framework.id
-                       << " because its info could not be recovered";
-          continue;
-        }
-
-        if (executor.latest.isNone()) {
-          LOG(WARNING) << "Skipping recovery of executor '" << executor.id
-                       << "' of framework " << framework.id
-                       << " because its latest run could not be recovered";
-          continue;
-        }
-
-        // We are only interested in the latest run of the executor!
-        const ContainerID& containerId = executor.latest.get();
-        Option<RunState> run = executor.runs.get(containerId);
-        CHECK_SOME(run);
-        CHECK_SOME(run.get().id);
-        CHECK_EQ(containerId, run.get().id.get());
-
-        // We need the pid so the reaper can monitor the executor so
-        // skip this executor if it's not present. This is not an
-        // error because the slave will try to wait on the container
-        // which will return a failed Termination and everything will
-        // get cleaned up.
-        if (!run.get().forkedPid.isSome()) {
-          continue;
-        }
-
-        if (run.get().completed) {
-          VLOG(1) << "Skipping recovery of executor '" << executor.id
-                  << "' of framework " << framework.id
-                  << " because its latest run "
-                  << containerId << " is completed";
-          continue;
-        }
-
-        LOG(INFO) << "Recovering container '" << containerId
-                  << "' for executor '" << executor.id
-                  << "' of framework " << framework.id;
-
-        // Create and store a container.
-        Container* container = new Container(containerId);
-        containers_[containerId] = container;
-        container->slaveId = state.get().id;
-        container->state = Container::RUNNING;
-
-        pid_t pid = run.get().forkedPid.get();
-
-        container->status.set(process::reap(pid));
-
-        container->status.future().get()
-          .onAny(defer(self(), &Self::reaped, containerId));
-
-        if (pids.containsValue(pid)) {
-          // This should (almost) never occur. There is the
-          // possibility that a new executor is launched with the same
-          // pid as one that just exited (highly unlikely) and the
-          // slave dies after the new executor is launched but before
-          // it hears about the termination of the earlier executor
-          // (also unlikely).
-          return Failure(
-              "Detected duplicate pid " + stringify(pid) +
-              " for container " + stringify(containerId));
-        }
-
-        pids.put(containerId, pid);
-      }
-    }
-
-    if (flags.docker_kill_orphans) {
-      // Get the list of all the running or exited containers so that
-      // we can remove any orphans that we find.
-      return docker->ps(true, DOCKER_NAME_PREFIX + state.get().id.value())
-        .then(defer(self(), &Self::_recover, lambda::_1));
-    }
+    return docker->ps(true, DOCKER_NAME_PREFIX + state.get().id.value())
+      .then(defer(self(), &Self::_recover, state.get(), lambda::_1));
   }
 
   return Nothing();
@@ -533,12 +477,16 @@ Future<Nothing> DockerContainerizerProcess::recover(
 
 
 Future<Nothing> DockerContainerizerProcess::_recover(
-    const list<Docker::Container>& _containers)
+    const SlaveState& state,
+    const list<Docker::Container>& containers)
 {
-  foreach (const Docker::Container& container, _containers) {
-    VLOG(1) << "Checking if Docker container named '"
-            << container.name << "' was started by Mesos";
+  // Existing containers.
+  hashmap<ContainerID, const Docker::Container*> _containers;
 
+  // Existing executors in docker containers.
+  hashmap<ContainerID, const Docker::Container*> executors;
+
+  foreach (const Docker::Container& container, containers) {
     Option<ContainerID> id = parse(container);
 
     // Ignore containers that Mesos didn't start.
@@ -546,18 +494,174 @@ Future<Nothing> DockerContainerizerProcess::_recover(
       continue;
     }
 
-    VLOG(1) << "Checking if Mesos container with ID '"
-            << stringify(id.get()) << "' has been orphaned";
+    if (strings::contains(container.name, ".executor")) {
+      executors[id.get()] = &container;
+    } else if(!strings::contains(container.name, ".log")) {
+      // We skip recording the log container.
+      // TODO(tnachen): Recover strategy when log container doesn'
+      // exist.
+      _containers[id.get()] = &container;
+    }
+  }
 
-    // Check if we're watching an executor for this container ID and
-    // if not, rm -f the Docker container.
-    if (!containers_.contains(id.get())) {
+  // Collection of pids that we've started reaping in order to
+  // detect very unlikely duplicate scenario (see pid check in
+  // recoverContainer).
+  hashset<pid_t> pids;
+
+  foreachvalue (const FrameworkState& framework, state.frameworks) {
+    foreachvalue (const ExecutorState& executor, framework.executors) {
+      if (executor.info.isNone()) {
+        LOG(WARNING) << "Skipping recovery of executor '" << executor.id
+                     << "' of framework " << framework.id
+                     << " because its info could not be recovered";
+        continue;
+      }
+
+      if (executor.latest.isNone()) {
+        LOG(WARNING) << "Skipping recovery of executor '" << executor.id
+                     << "' of framework " << framework.id
+                     << " because its latest run could not be recovered";
+        continue;
+      }
+
+      // We are only interested in the latest run of the executor!
+      const ContainerID& containerId = executor.latest.get();
+      Option<RunState> run = executor.runs.get(containerId);
+      CHECK_SOME(run);
+      CHECK_SOME(run.get().id);
+      CHECK_EQ(containerId, run.get().id.get());
+
+      // We need the pid so the reaper can monitor the executor so
+      // skip this executor if it's not present. This is not an
+      // error because the slave will try to wait on the container
+      // which will return a failed Termination and everything will
+      // get cleaned up.
+      if (!run.get().forkedPid.isSome()) {
+        continue;
+      }
+
+      if (run.get().completed) {
+        VLOG(1) << "Skipping recovery of executor '" << executor.id
+                << "' of framework " << framework.id
+                << " because its latest run "
+                << containerId << " is completed";
+        continue;
+      }
+
+      pid_t executorPid = run.get().forkedPid.get();
+
+      LOG(INFO) << "Recovering container '" << containerId
+                << "' for executor '" << executor.id
+                << "' of framework " << framework.id;
+
+      Try<bool> recover = recoverContainer(
+          containerId,
+          state.id,
+          executorPid,
+          _containers,
+          executors,
+          pids);
+
+      if (recover.isError()) {
+        return Failure(recover.error());
+      }
+    }
+  }
+
+  if (flags.docker_kill_orphans) {
+    foreachvalue (const Docker::Container* container, _containers) {
       // TODO(tnachen): Consider using executor_shutdown_grace_period.
-      docker->stop(container.id, flags.docker_stop_timeout, true);
+      docker->stop(container->id, flags.docker_stop_timeout, true);
+    }
+
+    foreachvalue (const Docker::Container* container, executors) {
+      // TODO(tnachen): Consider using executor_shutdown_grace_period.
+      docker->stop(container->id, flags.docker_stop_timeout, true);
     }
   }
 
   return Nothing();
+}
+
+
+Try<bool> DockerContainerizerProcess::recoverContainer(
+    const ContainerID& containerId,
+    const SlaveID& slaveId,
+    pid_t executorPid,
+    hashmap<ContainerID, const Docker::Container*>& containers,
+    hashmap<ContainerID, const Docker::Container*>& executors,
+    hashset<pid_t>& pids)
+{
+  bool reattachExecutor = false;
+  if (!os::exists(executorPid) && containers.contains(containerId)) {
+    // We want to still recover checkpointed containers whose pid
+    // of the executor cannot be found. We assume this happens
+    // because the slave was launched in a container itself and
+    // on re-launch loses all the forked executors.
+    // The only supported recovery in this scenario is if the
+    // executor was launched in a docker container and it still
+    // exists.
+    if (!containers[containerId]->pid.isSome()) {
+      // Skip recovering if the container already stopped.
+      return false;
+    }
+
+    if (!executors.contains(containerId)) {
+      // If we cannot find an executor for this container we skip
+      // recovery as well. We cannot simply launch a new executor
+      // since we cannot assume the executor is fault tolerant and
+      // can be relaunched.
+      return false;
+    }
+
+    reattachExecutor = true;
+  }
+
+  if (pids.contains(executorPid)) {
+    // This should (almost) never occur. There is the
+    // possibility that a new executor is launched with the same
+    // pid as one that just exited (highly unlikely) and the
+    // slave dies after the new executor is launched but before
+    // it hears about the termination of the earlier executor
+    // (also unlikely).
+    return Error(
+        "Detected duplicate pid " + stringify(executorPid) +
+        " for container " + stringify(containerId));
+  }
+
+  pids.insert(executorPid);
+
+  VLOG(1) << "Recovered docker container for container: " << containerId;
+  containers.erase(containerId);
+
+  // Create and store a container.
+  Container* container = new Container(containerId);
+  containers_[containerId] = container;
+  container->slaveId = slaveId;
+  container->state = Container::RUNNING;
+
+  if (reattachExecutor) {
+    VLOG(1) << "Rewaiting on executor container for container: "
+            << containerId;
+
+    Try<pid_t> waitPid =
+      launchWaitProcess(flags.docker, executors[containerId]->name);
+
+    if (waitPid.isError()) {
+      return Error(waitPid.error());
+    }
+
+    executors.erase(containerId);
+    executorPid = waitPid.get();
+  }
+
+  container->status.set(process::reap(executorPid));
+
+  container->status.future().get()
+    .onAny(defer(self(), &Self::reaped, containerId));
+
+  return true;
 }
 
 
@@ -805,26 +909,6 @@ Future<Nothing> DockerContainerizerProcess::___launchInContainer(
       flags.docker_sandbox_directory,
       None(),
       environment);
-}
-
-
-// Launches a docker wait process on given container name.
-// Returns the wait process pid.
-Try<pid_t> launchWaitProcess(const string& docker, const string& name)
-{
-  string command = "exit `" + docker + " wait " + name + "`";
-
-  Try<Subprocess> wait = subprocess(
-      command,
-      Subprocess::PATH("/dev/null"),
-      Subprocess::PATH("/dev/null"),
-      Subprocess::PATH("/dev/null"));
-
-  if (wait.isError()) {
-    return Error("Unable to launch docker wait on executor: " + wait.error());
-  }
-
-  return wait.get().pid();
 }
 
 
