@@ -109,7 +109,8 @@ public:
       stop,
       process::Future<Nothing>(
           const string&,
-          const Duration&, bool));
+          const Duration&,
+          bool));
 
   process::Future<Nothing> _run(
       const mesos::ContainerInfo& containerInfo,
@@ -150,11 +151,20 @@ public:
 class DockerContainerizerTest : public MesosTest
 {
 public:
-  static bool exists(
-      const list<Docker::Container>& containers,
+  static string containerName(
+      const SlaveID& slaveId,
       const ContainerID& containerId)
   {
-    string expectedName = slave::DOCKER_NAME_PREFIX + stringify(containerId);
+    return slave::DOCKER_NAME_PREFIX + slaveId.value() +
+      slave::DOCKER_NAME_SEPERATOR + containerId.value();
+  }
+
+  static bool exists(
+      const list<Docker::Container>& containers,
+      const SlaveID& slaveId,
+      const ContainerID& containerId)
+  {
+    string expectedName = containerName(slaveId, containerId);
 
     foreach (const Docker::Container& container, containers) {
       // Docker inspect name contains an extra slash in the beginning.
@@ -195,7 +205,7 @@ public:
 
     // Cleanup all mesos launched containers.
     foreach (const Docker::Container& container, containers.get()) {
-      AWAIT_READY_FOR(docker.get()->rm(container.id, true), Seconds(30));
+      ASSERT_TRUE(docker.get()->rm(container.id, true).await(Seconds(30)));
     }
 
     delete docker.get();
@@ -417,6 +427,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch_Executor)
 
   const Offer& offer = offers.get()[0];
 
+  SlaveID slaveId = offer.slave_id();
+
   TaskInfo task;
   task.set_name("");
   task.mutable_task_id()->set_value("1");
@@ -471,7 +483,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch_Executor)
 
   AWAIT_READY(containers);
 
-  ASSERT_TRUE(exists(containers.get(), containerId.get()));
+  ASSERT_TRUE(exists(containers.get(), slaveId, containerId.get()));
 
   Future<containerizer::Termination> termination =
     dockerContainerizer.wait(containerId.get());
@@ -547,6 +559,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch_Executor_Bridged)
 
   const Offer& offer = offers.get()[0];
 
+  SlaveID slaveId = offer.slave_id();
+
   TaskInfo task;
   task.set_name("");
   task.mutable_task_id()->set_value("1");
@@ -602,7 +616,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch_Executor_Bridged)
 
   AWAIT_READY(containers);
 
-  ASSERT_TRUE(exists(containers.get(), containerId.get()));
+  ASSERT_TRUE(exists(containers.get(), slaveId, containerId.get()));
 
   Future<containerizer::Termination> termination =
     dockerContainerizer.wait(containerId.get());
@@ -673,6 +687,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch)
 
   const Offer& offer = offers.get()[0];
 
+  SlaveID slaveId = offer.slave_id();
+
   TaskInfo task;
   task.set_name("");
   task.mutable_task_id()->set_value("1");
@@ -719,7 +735,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Launch)
 
   ASSERT_TRUE(containers.get().size() > 0);
 
-  ASSERT_TRUE(exists(containers.get(), containerId.get()));
+  ASSERT_TRUE(exists(containers.get(), slaveId, containerId.get()));
 
   Future<containerizer::Termination> termination =
     dockerContainerizer.wait(containerId.get());
@@ -1049,6 +1065,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Update)
 
   const Offer& offer = offers.get()[0];
 
+  SlaveID slaveId = offer.slave_id();
+
   TaskInfo task;
   task.set_name("");
   task.mutable_task_id()->set_value("1");
@@ -1089,8 +1107,9 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Update)
   AWAIT_READY_FOR(statusRunning, Seconds(60));
   EXPECT_EQ(TASK_RUNNING, statusRunning.get().state());
 
-  string containerName = slave::DOCKER_NAME_PREFIX + containerId.get().value();
-  Future<Docker::Container> container = docker->inspect(containerName);
+  string name = containerName(slaveId, containerId.get());
+
+  Future<Docker::Container> container = docker->inspect(name);
 
   AWAIT_READY(container);
 
@@ -1175,10 +1194,19 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
 
   MockDockerContainerizer dockerContainerizer(flags, &fetcher, docker);
 
+  SlaveID slaveId;
+  slaveId.set_value("s1");
   ContainerID containerId;
   containerId.set_value("c1");
   ContainerID reapedContainerId;
   reapedContainerId.set_value("c2");
+
+  string container1 = containerName(slaveId, containerId);
+  string container2 = containerName(slaveId, reapedContainerId);
+
+  // Clean up artifacts if containers still exists.
+  ASSERT_TRUE(docker->rm(container1, true).await(Seconds(30)));
+  ASSERT_TRUE(docker->rm(container2, true).await(Seconds(30)));
 
   Resources resources = Resources::parse("cpus:1;mem:512").get();
 
@@ -1196,7 +1224,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
     docker->run(
         containerInfo,
         commandInfo,
-        slave::DOCKER_NAME_PREFIX + stringify(containerId),
+        container1,
         flags.work_dir,
         flags.docker_sandbox_directory,
         resources);
@@ -1205,7 +1233,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
     docker->run(
         containerInfo,
         commandInfo,
-        slave::DOCKER_NAME_PREFIX + stringify(reapedContainerId),
+        container2,
         flags.work_dir,
         flags.docker_sandbox_directory,
         resources);
@@ -1214,6 +1242,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
   AWAIT_READY(d2);
 
   SlaveState slaveState;
+  slaveState.id = slaveId;
   FrameworkState frameworkState;
 
   ExecutorID execId;
@@ -1225,18 +1254,12 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
   execState.latest = containerId;
 
   Try<process::Subprocess> wait =
-    process::subprocess(
-        tests::flags.docker + " wait " +
-        slave::DOCKER_NAME_PREFIX +
-        stringify(containerId));
+    process::subprocess(tests::flags.docker + " wait " + container1);
 
   ASSERT_SOME(wait);
 
   Try<process::Subprocess> reaped =
-    process::subprocess(
-        tests::flags.docker + " wait " +
-        slave::DOCKER_NAME_PREFIX +
-        stringify(reapedContainerId));
+    process::subprocess(tests::flags.docker + " wait " + container2);
 
   ASSERT_SOME(reaped);
 
@@ -1250,15 +1273,6 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
 
   slaveState.frameworks.put(frameworkId, frameworkState);
 
-  // We need to capture and await on the stop future so that we can
-  // ensure there is no child process at the end of the test.
-  // The stop future is being awaited at teardown.
-  Future<Nothing> stop;
-  EXPECT_CALL(*mockDocker, stop(_, _, _))
-    .WillOnce(FutureResult(
-        &stop,
-        Invoke((MockDocker*) docker.get(), &MockDocker::_stop)));
-
   Future<Nothing> recover = dockerContainerizer.recover(slaveState);
 
   AWAIT_READY(recover);
@@ -1270,13 +1284,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
 
   AWAIT_FAILED(dockerContainerizer.wait(reapedContainerId));
 
-  dockerContainerizer.destroy(containerId);
-
-  AWAIT_READY(termination);
-
   AWAIT_READY(reaped.get().status());
-
-  AWAIT_READY_FOR(stop, Seconds(30));
 
   Shutdown();
 }
@@ -1865,6 +1873,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_SlaveRecoveryTaskContainer)
 
   const Offer& offer = offers.get()[0];
 
+  SlaveID slaveId = offer.slave_id();
+
   TaskInfo task;
   task.set_name("");
   task.mutable_task_id()->set_value("1");
@@ -1945,7 +1955,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_SlaveRecoveryTaskContainer)
 
   AWAIT_READY(containers);
 
-  ASSERT_TRUE(exists(containers.get(), containerId.get()));
+  ASSERT_TRUE(exists(containers.get(), slaveId, containerId.get()));
 
   Future<containerizer::Termination> termination =
     dockerContainerizer2->wait(containerId.get());
@@ -2138,7 +2148,7 @@ TEST_F(DockerContainerizerTest,
 
   AWAIT_READY(containers);
 
-  ASSERT_TRUE(exists(containers.get(), containerId.get()));
+  ASSERT_TRUE(exists(containers.get(), slaveId.get(), containerId.get()));
 
   driver.stop();
   driver.join();
@@ -2347,6 +2357,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_LaunchSandboxWithColon)
 
   const Offer& offer = offers.get()[0];
 
+  SlaveID slaveId = offer.slave_id();
+
   TaskInfo task;
   task.set_name("");
   task.mutable_task_id()->set_value("test:colon");
@@ -2393,7 +2405,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_LaunchSandboxWithColon)
 
   ASSERT_TRUE(containers.get().size() > 0);
 
-  ASSERT_TRUE(exists(containers.get(), containerId.get()));
+  ASSERT_TRUE(exists(containers.get(), slaveId, containerId.get()));
 
   Future<containerizer::Termination> termination =
     dockerContainerizer.wait(containerId.get());
