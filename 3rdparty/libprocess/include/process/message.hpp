@@ -19,6 +19,8 @@
 
 #include <process/pid.hpp>
 
+#include <process/trace/span.hpp>
+
 namespace process {
 
 struct Message
@@ -27,6 +29,8 @@ struct Message
   UPID from;
   UPID to;
   std::string body;
+
+  Option<trace::Span> span;
 };
 
 } // namespace process {

@@ -82,6 +82,8 @@
 
 #include <process/metrics/metrics.hpp>
 
+#include <process/trace/span.hpp>
+
 #include <stout/duration.hpp>
 #include <stout/foreach.hpp>
 #include <stout/lambda.hpp>
@@ -94,6 +96,7 @@
 #include <stout/synchronized.hpp>
 #include <stout/thread_local.hpp>
 #include <stout/unreachable.hpp>
+#include <stout/uuid.hpp>
 
 #include "config.hpp"
 #include "decoder.hpp"
@@ -555,6 +558,15 @@ static Message* parse(Request* request)
     return NULL;
   }
 
+  Option<trace::Span> span;
+  if (request->headers.contains("Libprocess-Trace-Id")) {
+    span = trace::Span(
+        UUID::fromString(request->headers["Libprocess-Trace-Id"]),
+        UUID::fromString(request->headers["Libprocess-Trace-SpanId"]));
+  } else {
+    span = trace::Span(UUID::random());
+  }
+
   // Now determine 'to'.
   size_t index = request->url.path.find('/', 1);
   index = index != string::npos ? index - 1 : string::npos;
@@ -581,6 +593,7 @@ static Message* parse(Request* request)
   message->from = from.get();
   message->to = to;
   message->body = request->body;
+  message->span = span;
 
   return message;
 }
