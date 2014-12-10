@@ -65,7 +65,8 @@ libprocess_la_SOURCES =		\
   src/socket.cpp		\
   src/subprocess.cpp		\
   src/time.cpp			\
-  src/timeseries.cpp
+  src/timeseries.cpp            \
+  src/trace/receiver.cpp
 
 if ENABLE_LIBEVENT
 else

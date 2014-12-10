@@ -64,4 +64,5 @@ nobase_include_HEADERS =		\
   process/timeout.hpp			\
   process/timer.hpp			\
   process/timeseries.hpp                \
+  process/trace/receiver.hpp            \
   process/trace/span.hpp
