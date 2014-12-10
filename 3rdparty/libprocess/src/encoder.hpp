@@ -135,8 +135,15 @@ public:
 
       out << "/" << message->name << " HTTP/1.1\r\n"
           << "User-Agent: libprocess/" << message->from << "\r\n"
-          << "Libprocess-From: " << message->from << "\r\n"
-          << "Connection: Keep-Alive\r\n"
+          << "Libprocess-From: " << message->from << "\r\n";
+
+      if (message->span.isSome()) {
+        const trace::Span& span = message->span.get();
+        out << "Libprocess-Trace-Id: " << span.traceId << "\r\n"
+            << "Libprocess-Trace-SpanId: " << span.id << "\r\n";
+      }
+
+      out << "Connection: Keep-Alive\r\n"
           << "Host: \r\n";
 
       if (message->body.size() > 0) {
