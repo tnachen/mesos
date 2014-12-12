@@ -150,7 +150,7 @@ private:
 
 
 StatusUpdateManagerProcess::StatusUpdateManagerProcess(const Flags& _flags)
-  : flags(_flags), paused(false) {}
+  : ProcessBase("status_update_manager"), flags(_flags), paused(false) {}
 
 
 StatusUpdateManagerProcess::~StatusUpdateManagerProcess()
