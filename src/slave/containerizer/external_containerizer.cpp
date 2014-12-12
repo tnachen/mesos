@@ -248,7 +248,9 @@ Future<hashset<ContainerID>> ExternalContainerizer::containers()
 
 
 ExternalContainerizerProcess::ExternalContainerizerProcess(
-    const Flags& _flags) : flags(_flags) {}
+    const Flags& _flags)
+  : ProcessBase(ID::generate("external_containerizer")),
+    flags(_flags) {}
 
 
 Future<Nothing> ExternalContainerizerProcess::recover(

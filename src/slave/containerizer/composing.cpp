@@ -50,7 +50,7 @@ class ComposingContainerizerProcess
 public:
   ComposingContainerizerProcess(
       const vector<Containerizer*>& containerizers)
-    : containerizers_(containerizers) {}
+    : ProcessBase("composing_containerizer"), containerizers_(containerizers) {}
 
   virtual ~ComposingContainerizerProcess();
 

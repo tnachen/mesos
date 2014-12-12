@@ -74,7 +74,8 @@ CgroupsMemIsolatorProcess::CgroupsMemIsolatorProcess(
     const Flags& _flags,
     const string& _hierarchy,
     const bool _limitSwap)
-  : flags(_flags),
+  : ProcessBase(ID::generate("cgroups_mem_isolator")),
+    flags(_flags),
     hierarchy(_hierarchy),
     limitSwap(_limitSwap) {}
 
