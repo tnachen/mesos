@@ -32,6 +32,8 @@
 #include <process/owned.hpp>
 #include <process/pid.hpp>
 
+#include <process/trace/span.hpp>
+
 #include <stout/duration.hpp>
 #include <stout/lambda.hpp>
 #include <stout/option.hpp>
@@ -71,6 +73,11 @@ public:
   virtual ~ProcessBase();
 
   UPID self() const { return pid; }
+
+  Option<trace::Span> span() const
+  {
+    return activeSpan;
+  }
 
 protected:
   /**
@@ -279,6 +286,16 @@ protected:
     return count;
   }
 
+  void setActiveSpan(const Option<trace::Span>& span)
+  {
+    activeSpan = span;
+  }
+
+  void resetSpan()
+  {
+    activeSpan = None();
+  }
+
 private:
   friend class SocketManager;
   friend class ProcessManager;
@@ -335,6 +352,8 @@ private:
 
   // Process PID.
   UPID pid;
+
+  Option<trace::Span> activeSpan;
 };
 
 
