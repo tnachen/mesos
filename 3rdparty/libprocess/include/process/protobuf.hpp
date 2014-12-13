@@ -100,10 +100,12 @@ protected:
   virtual void visit(const process::MessageEvent& event)
   {
     if (protobufHandlers.count(event.message->name) > 0) {
+      process::ProcessBase::setActiveSpan(event.message->span);
       from = event.message->from; // For 'reply'.
       protobufHandlers[event.message->name](
           event.message->from, event.message->body);
       from = process::UPID();
+      process::ProcessBase::resetSpan();
     } else {
       process::Process<T>::visit(event);
     }

@@ -145,10 +145,12 @@ struct DispatchEvent : Event
   DispatchEvent(
       const UPID& _pid,
       const std::shared_ptr<lambda::function<void(ProcessBase*)>>& _f,
-      const Option<const std::type_info*>& _functionType)
+      const Option<const std::type_info*>& _functionType,
+      const Option<trace::Span> _span = None())
     : pid(_pid),
       f(_f),
-      functionType(_functionType)
+      functionType(_functionType),
+      span(_span)
   {}
 
   virtual void visit(EventVisitor* visitor) const
@@ -163,6 +165,8 @@ struct DispatchEvent : Event
   const std::shared_ptr<lambda::function<void(ProcessBase*)>> f;
 
   const Option<const std::type_info*> functionType;
+
+  const Option<trace::Span> span;
 
 private:
   // Not copyable, not assignable.
