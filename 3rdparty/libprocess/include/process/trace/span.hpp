@@ -9,15 +9,15 @@ namespace trace {
 
 struct Span
 {
+  Span() : id(UUID::random()), traceId(UUID::random()) {}
+
   Span(const UUID& _traceId, Option<UUID> _parent = None())
-    : id(UUID::random()), traceId(_traceId), parent(_parent) {}
+    : id(UUID::random()), parent(_parent), traceId(_traceId) {}
 
   UUID id;
   Option<UUID> parent;
-  UUID traceId;
 
-  Time start;
-  Option<Time> end;
+  UUID traceId;
 };
 
 } // namespace trace {

@@ -82,7 +82,7 @@
 
 #include <process/metrics/metrics.hpp>
 
-#include <process/trace/span.hpp>
+#include <process/trace/receiver.hpp>
 
 #include <stout/duration.hpp>
 #include <stout/foreach.hpp>
@@ -497,23 +497,52 @@ void Clock::settle()
 }
 
 
+static Option<trace::Span> sampleSpan()
+{
+  static bool enabled =
+    os::hasenv("LIBPROCESS_TRACE_ENABLED") &&
+    os::getenv("LIBPROCESS_TRACE_ENABLED") == "1";
+
+  if (!enabled) {
+    return None();
+  }
+
+  //TODO(tnachen): Add a sampler so we don't trace every message.
+  return trace::Span();
+}
+
+
 static Message* encode(const UPID& from,
                        const UPID& to,
                        const string& name,
-                       const string& data = "")
+                       const string& data = "",
+                       const Option<trace::Span>& span = None())
 {
   Message* message = new Message();
   message->from = from;
   message->to = to;
   message->name = name;
   message->body = data;
+  if (span.isNone()) {
+    message->span = sampleSpan();
+  } else {
+    message->span = span;
+  }
   return message;
 }
 
 
 static void transport(Message* message, ProcessBase* sender = NULL)
 {
+  trace::record(message, trace::MESSAGE_OUTBOUND_QUEUED);
+
   if (message->to.address == __address__) {
+    if (message->span.isSome()) {
+      // A new trace span before it's delivered inbound.
+      const trace::Span& span = message->span.get();
+      message->span =
+        trace::Span(span.traceId, span.id);
+    }
     // Local message.
     process_manager->deliver(message->to, new MessageEvent(message), sender);
   } else {
@@ -564,7 +593,7 @@ static Message* parse(Request* request)
         UUID::fromString(request->headers["Libprocess-Trace-Id"]),
         UUID::fromString(request->headers["Libprocess-Trace-SpanId"]));
   } else {
-    span = trace::Span(UUID::random());
+    span = sampleSpan();
   }
 
   // Now determine 'to'.
@@ -2390,6 +2419,8 @@ bool ProcessManager::deliver(
     Clock::update(receiver, Clock::now(sender != NULL ? sender : __process__));
   }
 
+  trace::record(event, trace::MESSAGE_INBOUND_QUEUED);
+
   receiver->enqueue(event);
 
   return true;
@@ -2984,7 +3015,7 @@ Future<Response> ProcessManager::__processes__(const Request&)
 }
 
 
-ProcessBase::ProcessBase(const string& id)
+ProcessBase::ProcessBase(const string& id) : activeSpan(None())
 {
   process::initialize();
 
@@ -3060,12 +3091,13 @@ void ProcessBase::send(
   }
 
   // Encode and transport outgoing message.
-  transport(encode(pid, to, name, string(data, length)), this);
+  transport(encode(pid, to, name, string(data, length), activeSpan), this);
 }
 
 
 void ProcessBase::visit(const MessageEvent& event)
 {
+  setActiveSpan(event.message->span);
   if (handlers.message.count(event.message->name) > 0) {
     handlers.message[event.message->name](
         event.message->from,
@@ -3077,12 +3109,15 @@ void ProcessBase::visit(const MessageEvent& event)
     message->to = delegates[event.message->name];
     transport(message, this);
   }
+  resetSpan();
 }
 
 
 void ProcessBase::visit(const DispatchEvent& event)
 {
+  setActiveSpan(event.span);
   (*event.f)(this);
+  resetSpan();
 }
 
 
@@ -3370,7 +3405,12 @@ void dispatch(
 {
   process::initialize();
 
-  DispatchEvent* event = new DispatchEvent(pid, f, functionType);
+  DispatchEvent* event = new DispatchEvent(
+      pid,
+      f,
+      functionType,
+      __process__ != NULL ? __process__->span() : None());
+
   process_manager->deliver(pid, event, __process__);
 }
 
