@@ -354,11 +354,6 @@ private:
         stringify(id);
     }
 
-    std::string logName()
-    {
-      return name() + DOCKER_NAME_SEPERATOR + "log";
-    }
-
     std::string executorName()
     {
       return name() + DOCKER_NAME_SEPERATOR + "executor";
