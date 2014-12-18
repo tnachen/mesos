@@ -20,6 +20,7 @@
 #include <unistd.h>
 
 #include <iostream>
+#include <list>
 #include <map>
 
 #include <stout/foreach.hpp>
@@ -29,12 +30,19 @@
 
 #include <stout/os/execenv.hpp>
 
+#ifdef __linux__
+#include "linux/fs.hpp"
+#include "linux/ns.hpp"
+#endif // __linux__
+
 #include "mesos/mesos.hpp"
 
 #include "slave/containerizer/mesos/launch.hpp"
 
 using std::cerr;
+using std::cout;
 using std::endl;
+using std::list;
 using std::map;
 using std::string;
 
@@ -53,7 +61,14 @@ MesosContainerizerLaunch::Flags::Flags()
 
   add(&directory,
       "directory",
-      "The directory to chdir to.");
+      "The directory to chdir to. If rootfs is specified this must\n"
+      "be relative to the new root.");
+
+  add(&rootfs,
+      "rootfs",
+      "Path to the container root filesystem.\n"
+      "The command and directory flags must be relative to rootfs\n"
+      "Different platforms may implement 'chroot' differently.");
 
   add(&user,
       "user",
@@ -197,17 +212,41 @@ int MesosContainerizerLaunch::execute()
     }
   }
 
-  // Enter working directory.
-  Try<Nothing> chdir = os::chdir(flags.directory.get());
-  if (chdir.isError()) {
-    cerr << "Failed to chdir into work directory '"
-         << flags.directory.get() << "': " << chdir.error() << endl;
-    return 1;
+  // Change root to a new root, if provided.
+  if (flags.rootfs.isSome()) {
+    cout << "Changing root to " << flags.rootfs.get() << endl;
+
+    // Verify that rootfs is an absolute path.
+    Result<string> realpath = os::realpath(flags.rootfs.get());
+    if (realpath.isError()) {
+      cerr << "Failed to determine if rootfs is an absolute path: "
+           << realpath.error() << endl;
+      return 1;
+    } else if (realpath.isNone()) {
+      cerr << "Rootfs path does not exist" << endl;
+      return 1;
+    } else if (realpath.get() != flags.rootfs.get()) {
+      cerr << "Rootfs path is not an absolute path" << endl;
+      return 1;
+    }
+
+#ifdef __linux__
+    Try<Nothing> chroot = fs::chroot::enter(flags.rootfs.get());
+#else // For any other platform we'll just use POSIX chroot.
+    Try<Nothing> chroot = os::chroot(flags.rootfs.get());
+#endif // __linux__
+    if (chroot.isError()) {
+      cerr << "Failed to enter chroot '" << flags.rootfs.get()
+           << "': " << chroot.error();
+      return 1;
+    }
   }
 
   // Change user if provided. Note that we do that after executing the
   // preparation commands so that those commands will be run with the
   // same privilege as the mesos-slave.
+  // NOTE: The requisite user/group information must be present if
+  // a container root filesystem is used.
   if (flags.user.isSome()) {
     Try<Nothing> su = os::su(flags.user.get());
     if (su.isError()) {
@@ -215,6 +254,15 @@ int MesosContainerizerLaunch::execute()
            << su.error() << endl;
       return 1;
     }
+  }
+
+  // Enter working directory. This must be an absolute path, relative
+  // to the new root.
+  Try<Nothing> chdir = os::chdir(flags.directory.get());
+  if (chdir.isError()) {
+    cerr << "Failed to chdir into work directory '"
+         << flags.directory.get() << "': " << chdir.error() << endl;
+    return 1;
   }
 
   // Relay the environment variables.
