@@ -6,6 +6,7 @@ Release Notes - Mesos - Version 0.21.1
   * [MESOS-2047] Isolator cleanup failures shouldn't cause TASK_LOST.
   * [MESOS-2071] Libprocess generates invalid HTTP
   * [MESOS-2147] Large number of connections slows statistics.json responses.
+  * [MESOS-2182] Performance issue in libprocess SocketManager.
 
 ** Improvement
   * [MESOS-1925] Docker kill does not allow containers to exit gracefully
