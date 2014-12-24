@@ -488,13 +488,19 @@ void Clock::settle()
 }
 
 
-static Option<trace::Span> sampleSpan()
+static bool traceEnabled()
 {
   static bool enabled =
     os::hasenv("LIBPROCESS_TRACE_ENABLED") &&
     os::getenv("LIBPROCESS_TRACE_ENABLED") == "1";
 
-  if (!enabled) {
+  return enabled;
+}
+
+
+static Option<trace::Span> sampleSpan()
+{
+  if (!traceEnabled()) {
     return None();
   }
 
@@ -579,12 +585,14 @@ static Message* parse(Request* request)
   }
 
   Option<trace::Span> span;
-  if (request->headers.contains("Libprocess-Trace-Id")) {
-    span = trace::Span(
-        UUID::fromString(request->headers["Libprocess-Trace-Id"]),
-        UUID::fromString(request->headers["Libprocess-Trace-SpanId"]));
-  } else {
-    span = sampleSpan();
+  if (traceEnabled()) {
+    if (request->headers.contains("Libprocess-Trace-Id")) {
+      span = trace::Span(
+          UUID::fromString(request->headers["Libprocess-Trace-Id"]),
+          UUID::fromString(request->headers["Libprocess-Trace-SpanId"]));
+    } else {
+      span = sampleSpan();
+    }
   }
 
   // Now determine 'to'.
