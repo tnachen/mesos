@@ -185,7 +185,6 @@ public:
     return false;
   }
 
-
   static bool running(
       const process::Shared<Docker>& docker,
       const SlaveID& slaveId,
@@ -214,6 +213,16 @@ public:
     return false;
   }
 
+  static bool containsLine(string text, string expectedLine)
+  {
+    foreach (const string& line, strings::split(text, "\n")) {
+      if (line == expectedLine) {
+        return true;
+      }
+    }
+
+    return false;
+  }
 
   virtual void TearDown()
   {
@@ -818,6 +827,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Kill)
   AWAIT_READY_FOR(statusRunning, Seconds(60));
   EXPECT_EQ(TASK_RUNNING, statusRunning.get().state());
 
+  ASSERT_TRUE(running(docker, slaveId, containerId.get()));
+
   Future<TaskStatus> statusKilled;
   EXPECT_CALL(sched, statusUpdate(&driver, _))
     .WillOnce(FutureArg<1>(&statusKilled));
@@ -1138,6 +1149,11 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
   MockDocker* mockDocker = new MockDocker(tests::flags.docker);
   Shared<Docker> docker(mockDocker);
 
+  Future<string> stoppedContainer;
+  EXPECT_CALL(*mockDocker, stop(_, _, _))
+    .WillOnce(DoAll(FutureArg<0>(&stoppedContainer),
+                    Return(Nothing())));
+
   Fetcher fetcher;
 
   MockDockerContainerizer dockerContainerizer(flags, &fetcher, docker);
@@ -1189,6 +1205,12 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
   AWAIT_READY(d1);
   AWAIT_READY(d2);
 
+  ASSERT_TRUE(running(docker, slaveId, containerId));
+  ASSERT_TRUE(running(docker, slaveId, reapedContainerId));
+
+  Future<Docker::Container> inspect = docker->inspect(container2);
+  AWAIT_READY(inspect);
+
   SlaveState slaveState;
   slaveState.id = slaveId;
   FrameworkState frameworkState;
@@ -1205,11 +1227,6 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
     process::subprocess(tests::flags.docker + " wait " + container1);
 
   ASSERT_SOME(wait);
-
-  Try<process::Subprocess> reaped =
-    process::subprocess(tests::flags.docker + " wait " + container2);
-
-  ASSERT_SOME(reaped);
 
   FrameworkID frameworkId;
 
@@ -1232,7 +1249,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
 
   AWAIT_FAILED(dockerContainerizer.wait(reapedContainerId));
 
-  AWAIT_READY(reaped.get().status());
+  AWAIT_EQ(inspect.get().id, stoppedContainer);
 
   Shutdown();
 }
@@ -1336,14 +1353,14 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Logs)
   Try<string> read = os::read(path::join(directory.get(), "stderr"));
 
   ASSERT_SOME(read);
-  EXPECT_TRUE(strings::contains(read.get(), "err" + uuid));
-  EXPECT_FALSE(strings::contains(read.get(), "out" + uuid));
+  EXPECT_TRUE(containsLine(read.get(), "err" + uuid));
+  EXPECT_FALSE(containsLine(read.get(), "out" + uuid));
 
   read = os::read(path::join(directory.get(), "stdout"));
 
   ASSERT_SOME(read);
-  EXPECT_TRUE(strings::contains(read.get(), "out" + uuid));
-  EXPECT_FALSE(strings::contains(read.get(), "err" + uuid));
+  EXPECT_TRUE(containsLine(read.get(), "out" + uuid));
+  EXPECT_FALSE(containsLine(read.get(), "err" + uuid));
 
   driver.stop();
   driver.join();
@@ -1398,6 +1415,8 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Default_CMD)
   EXPECT_NE(0u, offers.get().size());
 
   const Offer& offer = offers.get()[0];
+
+  SlaveID slaveId = offer.slave_id();
 
   TaskInfo task;
   task.set_name("");
@@ -1456,11 +1475,12 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Default_CMD)
   // Since we're not passing any command value, we're expecting the
   // default entry point to be run which is 'echo' with the default
   // command from the image which is 'inky'.
-  EXPECT_TRUE(strings::contains(read.get(), "inky"));
+  EXPECT_TRUE(containsLine(read.get(), "inky"));
 
   read = os::read(path::join(directory.get(), "stderr"));
   ASSERT_SOME(read);
-  EXPECT_FALSE(strings::contains(read.get(), "inky"));
+
+  EXPECT_FALSE(containsLine(read.get(), "inky"));
 
   driver.stop();
   driver.join();
@@ -1576,13 +1596,13 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Default_CMD_Override)
   // We expect the passed in command value to override the image's
   // default command, thus we should see the value of 'uuid' in the
   // output instead of the default command which is 'inky'.
-  EXPECT_TRUE(strings::contains(read.get(), uuid));
-  EXPECT_FALSE(strings::contains(read.get(), "inky"));
+  EXPECT_TRUE(containsLine(read.get(), uuid));
+  EXPECT_FALSE(containsLine(read.get(), "inky"));
 
   read = os::read(path::join(directory.get(), "stderr"));
   ASSERT_SOME(read);
-  EXPECT_FALSE(strings::contains(read.get(), "inky"));
-  EXPECT_FALSE(strings::contains(read.get(), uuid));
+  EXPECT_FALSE(containsLine(read.get(), "inky"));
+  EXPECT_FALSE(containsLine(read.get(), uuid));
 
   driver.stop();
   driver.join();
@@ -1699,13 +1719,13 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Default_CMD_Args)
   // We expect the passed in command arguments to override the image's
   // default command, thus we should see the value of 'uuid' in the
   // output instead of the default command which is 'inky'.
-  EXPECT_TRUE(strings::contains(read.get(), uuid));
-  EXPECT_FALSE(strings::contains(read.get(), "inky"));
+  EXPECT_TRUE(containsLine(read.get(), uuid));
+  EXPECT_FALSE(containsLine(read.get(), "inky"));
 
   read = os::read(path::join(directory.get(), "stderr"));
   ASSERT_SOME(read);
-  EXPECT_FALSE(strings::contains(read.get(), "inky"));
-  EXPECT_FALSE(strings::contains(read.get(), uuid));
+  EXPECT_FALSE(containsLine(read.get(), "inky"));
+  EXPECT_FALSE(containsLine(read.get(), uuid));
 
   driver.stop();
   driver.join();
@@ -2165,7 +2185,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_PortMapping)
 
   // We expect the uuid that is sent to host port to be written
   // to stdout by the docker container running nc -l.
-  EXPECT_TRUE(strings::contains(read.get(), uuid));
+  EXPECT_TRUE(containsLine(read.get(), uuid));
 
   driver.stop();
   driver.join();
