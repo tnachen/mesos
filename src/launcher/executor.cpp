@@ -120,24 +120,41 @@ public:
       return;
     }
 
-    // Skip sanity checks for TaskInfo if override is provided since
-    // the executor will be running the override command.
+    // The task command is specified directly or JSON serialized into
+    // the task data if an executor info is provided.
+    CommandInfo commandInfo;
     if (override.isNone()) {
-      // Sanity checks.
-      CHECK(task.has_command()) << "Expecting task " << task.task_id()
-                                << " to have a command!";
+      CHECK(task.has_command() || task.has_executor())
+        << "Expecting task " << task.task_id()
+        << " to have either a command or an executor!";
+
+      if (task.has_command()) {
+        commandInfo = task.command();
+      } else {
+        Try<JSON::Object> json = JSON::parse<JSON::Object>(task.data());
+        CHECK_SOME(json)
+          << "Failed to parse JSON from task data: "
+          << json.error();
+
+        Try<CommandInfo> parse = protobuf::parse<CommandInfo>(json.get());
+        CHECK_SOME(parse)
+          << "Failed to parse CommandInfo from JSON task data: "
+          << parse.error();
+
+        commandInfo = parse.get();
+      }
 
       // TODO(jieyu): For now, we just fail the executor if the task's
       // CommandInfo is not valid. The framework will receive
       // TASK_FAILED for the task, and will most likely find out the
       // cause with some debugging. This is a temporary solution. A more
       // correct solution is to perform this validation at master side.
-      if (task.command().shell()) {
-        CHECK(task.command().has_value())
+      if (commandInfo.shell()) {
+        CHECK(commandInfo.has_value())
           << "Shell command of task " << task.task_id()
           << " is not specified!";
       } else {
-        CHECK(task.command().has_value())
+        CHECK(commandInfo.has_value())
           << "Executable of task " << task.task_id()
           << " is not specified!";
       }
@@ -169,11 +186,11 @@ public:
     }
 
     // Prepare the argv before fork as it's not async signal safe.
-    char **argv = new char*[task.command().arguments().size() + 1];
-    for (int i = 0; i < task.command().arguments().size(); i++) {
-      argv[i] = (char*) task.command().arguments(i).c_str();
+    char **argv = new char*[commandInfo.arguments().size() + 1];
+    for (int i = 0; i < commandInfo.arguments().size(); i++) {
+      argv[i] = (char*) commandInfo.arguments(i).c_str();
     }
-    argv[task.command().arguments().size()] = NULL;
+    argv[commandInfo.arguments().size()] = NULL;
 
     // Prepare the command log message.
     string command;
@@ -184,12 +201,12 @@ public:
       for (int i = 0; argv[i] != NULL; i++) {
         command += string(argv[i]) + " ";
       }
-    } else if (task.command().shell()) {
-      command = "sh -c '" + task.command().value() + "'";
+    } else if (commandInfo.shell()) {
+      command = "sh -c '" + commandInfo.value() + "'";
     } else {
       command =
-        "[" + task.command().value() + ", " +
-        strings::join(", ", task.command().arguments()) + "]";
+        "[" + commandInfo.value() + ", " +
+        strings::join(", ", commandInfo.arguments()) + "]";
     }
 
     if ((pid = fork()) == -1) {
@@ -234,15 +251,15 @@ public:
 
       // The child has successfully setsid, now run the command.
       if (override.isNone()) {
-        if (task.command().shell()) {
+        if (commandInfo.shell()) {
           execl(
               "/bin/sh",
               "sh",
               "-c",
-              task.command().value().c_str(),
+              commandInfo.value().c_str(),
               (char*) NULL);
         } else {
-          execvp(task.command().value().c_str(), argv);
+          execvp(commandInfo.value().c_str(), argv);
         }
       } else {
         char** argv = override.get();

@@ -87,6 +87,20 @@ inline Try<mesos::ContainerInfo> parse(const std::string& value)
 }
 
 
+template<>
+inline Try<mesos::ExecutorInfo> parse(const std::string& value)
+{
+  // Convert from string or file to JSON.
+  Try<JSON::Object> json = parse<JSON::Object>(value);
+  if (json.isError()) {
+    return Error(json.error());
+  }
+
+  // Convert from JSON to Protobuf.
+  return protobuf::parse<mesos::ExecutorInfo>(json.get());
+}
+
+
 // When the same variable is listed multiple times,
 // uses only the last value.
 template<>

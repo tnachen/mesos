@@ -29,9 +29,12 @@
 #include <stout/flags.hpp>
 #include <stout/foreach.hpp>
 #include <stout/hashmap.hpp>
+#include <stout/json.hpp>
 #include <stout/none.hpp>
 #include <stout/option.hpp>
 #include <stout/os.hpp>
+#include <stout/protobuf.hpp>
+#include <stout/stringify.hpp>
 
 #include "common/parse.hpp"
 #include "common/protobuf_utils.hpp"
@@ -81,7 +84,30 @@ public:
         "Resources for the command",
         "cpus:1;mem:128");
 
-    add(&hadoop,
+    add(&executor_info,
+        "executor_info",
+        "Optional JSON formatted ExecutorInfo that specifies the executor\n"
+        "to run the task. The JSON can be provided directly or as a path\n"
+        "to a file containing JSON, of the form 'file:///path/to/file' or\n"
+        "'/path/to/file'. If unspecified, the slave will determine a\n"
+        "suitable executor. The task's command will be passed to the\n"
+        "executor in the task's data field as a JSON serialized CommandInfo.\n"
+        "\n"
+        "Example:\n"
+        "{\n"
+        " \"executor_id\": {\"value\":\"test\"},\n"
+        " \"command\": {\"value\":\"/path/to/executor\"},\n"
+        " \"resources\": [\n"
+        "                {\"name\":\"cpus\",\n"
+        "                 \"type\":\"SCALAR\",\n"
+        "                 \"scalar\": {\"value\": 1.0}},\n"
+        "                {\"name\":\"mem\",\n"
+        "                 \"type\":\"SCALAR\",\n"
+        "                 \"scalar\": {\"value\": 128}}\n"
+        "              ]\n"
+        "}");
+
+      add(&hadoop,
         "hadoop",
         "Path to `hadoop' script (used for copying packages)",
         "hadoop");
@@ -123,6 +149,7 @@ public:
   bool overwrite;
   bool checkpoint;
   Option<string> docker_image;
+  Option<ExecutorInfo> executor_info;
 };
 
 
@@ -135,13 +162,15 @@ public:
       const Option<hashmap<string, string>>& _environment,
       const string& _resources,
       const Option<string>& _uri,
-      const Option<string>& _dockerImage)
+      const Option<string>& _dockerImage,
+      const Option<ExecutorInfo>& _executorInfo)
     : name(_name),
       command(_command),
       environment(_environment),
       resources(_resources),
       uri(_uri),
       dockerImage(_dockerImage),
+      executorInfo(_executorInfo),
       launched(false) {}
 
   virtual ~CommandScheduler() {}
@@ -184,10 +213,10 @@ public:
         task.mutable_slave_id()->MergeFrom(offer.slave_id());
         task.mutable_resources()->CopyFrom(TASK_RESOURCES.get());
 
-        CommandInfo* commandInfo = task.mutable_command();
-        commandInfo->set_value(command);
+        CommandInfo commandInfo;
+        commandInfo.set_value(command);
         if (environment.isSome()) {
-          Environment* environment_ = commandInfo->mutable_environment();
+          Environment* environment_ = commandInfo.mutable_environment();
           foreachpair (const std::string& name,
                        const std::string& value,
                        environment.get()) {
@@ -199,7 +228,21 @@ public:
         }
 
         if (uri.isSome()) {
-          task.mutable_command()->add_uris()->set_value(uri.get());
+          commandInfo.add_uris()->set_value(uri.get());
+        }
+
+        if (executorInfo.isSome() && dockerImage.isSome()) {
+          cerr << "Only one of executorInfo or dockerImage is supported"
+               << endl;
+          driver->abort();
+          return;
+        }
+
+        if (executorInfo.isSome()) {
+          task.mutable_executor()->CopyFrom(executorInfo.get());
+          task.set_data(stringify(JSON::Protobuf(commandInfo)));
+        } else {
+          task.mutable_command()->CopyFrom(commandInfo);
         }
 
         if (dockerImage.isSome()) {
@@ -270,6 +313,7 @@ private:
   const string resources;
   const Option<string> uri;
   const Option<string> dockerImage;
+  const Option<ExecutorInfo> executorInfo;
   bool launched;
 };
 
@@ -388,7 +432,8 @@ int main(int argc, char** argv)
       environment,
       flags.resources,
       uri,
-      dockerImage);
+      dockerImage,
+      flags.executor_info);
 
   FrameworkInfo framework;
   framework.set_user(user.get());
