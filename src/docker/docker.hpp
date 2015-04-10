@@ -115,6 +115,10 @@ public:
   virtual process::Future<Container> inspect(
       const std::string& container) const;
 
+  // Performs 'docker inspect CONTAINER' string output.
+  virtual process::Future<std::string> inspect_string(
+      const std::string& container) const;
+
   // Performs 'docker ps (-a)'.
   virtual process::Future<std::list<Container> > ps(
       bool all = false,
@@ -159,6 +163,10 @@ private:
 
   static process::Future<Container> __inspect(
       const std::string& output);
+
+  static process::Future<std::string> _inspect_string(
+      const std::string& cmd,
+      const process::Subprocess& s);
 
   static process::Future<Nothing> _run(
       const Option<int>& status);

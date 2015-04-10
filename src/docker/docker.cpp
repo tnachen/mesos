@@ -617,6 +617,54 @@ Future<Nothing> Docker::rm(
 }
 
 
+Future<string> Docker::inspect_string(const string& container) const
+{
+  const string cmd =  path + " inspect " + container;
+
+  VLOG(1) << "Running " << cmd;
+
+  Try<Subprocess> s = subprocess(
+      cmd,
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PIPE(),
+      Subprocess::PIPE());
+
+  if (s.isError()) {
+    return Failure(s.error());
+  }
+
+  return s.get().status()
+    .then(lambda::bind(&Docker::_inspect_string, cmd, s.get()));
+}
+
+
+Future<string> Docker::_inspect_string(
+    const string& cmd,
+    const Subprocess& s)
+{
+  // Check the exit status of 'docker inspect'.
+  CHECK_READY(s.status());
+
+  Option<int> status = s.status().get();
+
+  if (!status.isSome()) {
+    return Failure("No status found from '" + cmd + "'");
+  } else if (status.get() != 0) {
+    CHECK_SOME(s.err());
+    return io::read(s.err().get())
+      .then(lambda::bind(
+          failure<string>,
+          cmd,
+          status.get(),
+          lambda::_1));
+  }
+
+  // Read to EOF.
+  CHECK_SOME(s.out());
+  return io::read(s.out().get());
+}
+
+
 Future<Docker::Container> Docker::inspect(const string& container) const
 {
   const string cmd =  path + " inspect " + container;

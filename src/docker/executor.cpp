@@ -54,7 +54,9 @@ using namespace process;
 // Executor that is responsible to execute a docker container, and
 // redirect log output to configured stdout and stderr files.
 // Similar to the CommandExecutor, it is only responsible to launch
-// one container and exits afterwards.
+// one container and exits afterwards. It also sends a TASK_RUNNING
+// update after docker run with the docker info output in the status
+// update.
 // The executor also assumes it is launched from the
 // DockerContainerizer, which already calls setsid before launching
 // the executor.
@@ -94,6 +96,62 @@ public:
 
   void disconnected(ExecutorDriver* driver) {}
 
+  void __sendDockerInfo(
+      const Owned<Promise<Nothing>>& promise,
+      ExecutorDriver* driver,
+      const TaskID& taskId,
+      bool retry,
+      const Future<string>& dockerInfo)
+  {
+    if (dockerInfo.isReady()) {
+      TaskStatus status;
+      status.mutable_task_id()->MergeFrom(taskId);
+      status.set_state(TASK_RUNNING);
+      status.set_data(dockerInfo.get());
+      driver->sendStatusUpdate(status);
+      runningSent = true;
+      promise->set(Nothing());
+    } else if (retry) {
+      // Keep retrying until we get inspect information, as
+      // the container might not be ready yet.
+      dispatch(self(), &Self::_sendDockerInfo, promise, driver, taskId, retry);
+    } else {
+      promise->set(Nothing());
+    }
+  }
+
+  void _sendDockerInfo(
+      const Owned<Promise<Nothing>>& promise,
+      ExecutorDriver* driver,
+      const TaskID& taskId,
+      bool retry)
+  {
+    if (runningSent) {
+      promise.set(Nothing());
+      return;
+    }
+
+    docker->inspect_string(container)
+      .onAny(defer(
+          self(),
+          &Self::__sendDockerInfo,
+	  promise,
+          driver,
+          taskId,
+	  retry,
+          lambda::_1));
+  }
+
+  Future<Nothing> sendDockerInfo(
+      ExecutorDriver* driver,
+      const TaskID& taskId,
+      bool retry)
+  {
+    Owned<Promise<Nothing>> promise(new Promise<Nothing>());
+    _sendDockerInfo(promise, driver, taskId, retry);
+    return promise->future();
+  }
+
   void launchTask(ExecutorDriver* driver, const TaskInfo& task)
   {
     if (launched) {
@@ -102,7 +160,6 @@ public:
       status.set_state(TASK_FAILED);
       status.set_message(
           "Attempted to run multiple tasks using a \"docker\" executor");
-
       driver->sendStatusUpdate(status);
       return;
     }
@@ -139,10 +196,7 @@ public:
 
     dockerRun = run;
 
-    TaskStatus status;
-    status.mutable_task_id()->MergeFrom(task.task_id());
-    status.set_state(TASK_RUNNING);
-    driver->sendStatusUpdate(status);
+    sendDockerInfo(driver, task.task_id(), true);
 
     launched = true;
   }
@@ -168,6 +222,18 @@ public:
   virtual void error(ExecutorDriver* driver, const string& message) {}
 
 private:
+  void _reaped(
+      ExecutorDriver* driver,
+      const TaskStatus& status)
+  {
+    driver->sendStatusUpdate(status);
+
+    // A hack for now ... but we need to wait until the status update
+    // is sent to the slave before we shut ourselves down.
+    os::sleep(Seconds(1));
+    driver->stop();
+  }
+
   void reaped(
       ExecutorDriver* driver,
       const TaskID& taskId,
@@ -190,17 +256,19 @@ private:
     taskStatus.set_state(state);
     taskStatus.set_message(message);
 
-    driver->sendStatusUpdate(taskStatus);
-
-    // A hack for now ... but we need to wait until the status update
-    // is sent to the slave before we shut ourselves down.
-    os::sleep(Seconds(1));
-    driver->stop();
+    if (!runningSent) {
+      // The executor has't sent status TASK_RUNNING with docker info,
+      // so we try again as a last effort to do so.
+      sendDockerInfo(driver, taskId, false)
+	.onAny(defer(self(), &Self::_reaped, driver, taskStatus));
+    } else {
+      _reaped(driver, taskStatus);
+    }
   }
-
 
   bool launched;
   bool killed;
+  bool runningSent;
   Owned<Docker> docker;
   string container;
   string sandboxDirectory;
