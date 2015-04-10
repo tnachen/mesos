@@ -109,14 +109,9 @@ Option<ContainerID> parse(const Docker::Container& container)
     }
 
     vector<string> parts = strings::split(name.get(), DOCKER_NAME_SEPERATOR);
-    if (parts.size() == 2) {
+    if (parts.size() == 2 || parts.size() == 3) {
       ContainerID id;
       id.set_value(parts[1]);
-      return id;
-    } else if (parts.size() == 3) {
-      // We found a executor or log container.
-      ContainerID id;
-      id.set_value(parts[2]);
       return id;
     }
   }
@@ -130,6 +125,8 @@ Option<ContainerID> parse(const Docker::Container& container)
 Try<pid_t> launchWaitProcess(const string& docker, const string& name)
 {
   string command = "exit `" + docker + " wait " + name + "`";
+
+  VLOG(1) << "Launching wait process: " << command;
 
   Try<Subprocess> wait = subprocess(
       command,
@@ -495,11 +492,13 @@ Future<Nothing> DockerContainerizerProcess::_recover(
     }
 
     if (strings::contains(container.name, ".executor")) {
+      VLOG(1) << "Detected executor container for docker container '"
+              << id.get().value() << "'";
+
       executors[id.get()] = &container;
-    } else if(!strings::contains(container.name, ".log")) {
-      // We skip recording the log container.
-      // TODO(tnachen): Recover strategy when log container doesn'
-      // exist.
+    } else {
+      VLOG(1) << "Detected docker container '" << id.get().value() << "'";
+
       _containers[id.get()] = &container;
     }
   }
@@ -604,6 +603,9 @@ Try<bool> DockerContainerizerProcess::recoverContainer(
     // exists.
     if (!containers[containerId]->pid.isSome()) {
       // Skip recovering if the container already stopped.
+      LOG(INFO) << "Skipping recovery of container '" << containerId
+                << "' as it already completed";
+
       return false;
     }
 
@@ -612,6 +614,9 @@ Try<bool> DockerContainerizerProcess::recoverContainer(
       // recovery as well. We cannot simply launch a new executor
       // since we cannot assume the executor is fault tolerant and
       // can be relaunched.
+      LOG(INFO) << "Skipping recovery of contianer '" << containerId
+                << "' as executor cannot be found";
+
       return false;
     }
 
@@ -646,7 +651,7 @@ Try<bool> DockerContainerizerProcess::recoverContainer(
             << containerId;
 
     Try<pid_t> waitPid =
-      launchWaitProcess(flags.docker, executors[containerId]->name);
+      launchWaitProcess(flags.docker, executors[containerId]->id);
 
     if (waitPid.isError()) {
       return Error(waitPid.error());
@@ -807,6 +812,11 @@ Future<pid_t> DockerContainerizerProcess::___launch(
     environment[variable.name()] = variable.value();
   }
 
+  // Pass GLOG flag to the executor.
+  if (os::hasenv("GLOG_v")) {
+    environment["GLOG_v"] = os::getenv("GLOG_v");
+  }
+
   string command = "mesos-docker-executor --docker=" + flags.docker +
                    " --container=" + container->name();
 
@@ -887,6 +897,11 @@ Future<Nothing> DockerContainerizerProcess::___launchInContainer(
     environment[variable.name()] = variable.value();
   }
 
+  // Pass GLOG flag to the executor.
+  if (os::hasenv("GLOG_v")) {
+    environment["GLOG_v"] = os::getenv("GLOG_v");
+  }
+
   // We are launching a mesos-docker-executor in a docker container so
   // that the containerizer can recover the executor container, as we
   // are assuming this instance is launched in a docker container and
@@ -896,10 +911,17 @@ Future<Nothing> DockerContainerizerProcess::___launchInContainer(
   // Mounting in the docker socket so the executor can communicate to
   // the host docker daemon. We are assuming the current instance is
   // launching docker containers to the host daemon as well.
-  Volume* volume = containerInfo.add_volumes();
-  volume->set_host_path(flags.docker_socket);
-  volume->set_container_path(flags.docker_socket);
-  volume->set_mode(Volume::RO);
+  Volume* dockerSockVolume = containerInfo.add_volumes();
+  dockerSockVolume->set_host_path(flags.docker_socket);
+  dockerSockVolume->set_container_path(flags.docker_socket);
+  dockerSockVolume->set_mode(Volume::RO);
+
+  // Mounting in sandbox so the logs from the executor can be
+  // persisted over container failures.
+  Volume* sandboxVolume = containerInfo.add_volumes();
+  sandboxVolume->set_host_path(container->directory);
+  sandboxVolume->set_container_path(container->directory);
+  sandboxVolume->set_mode(Volume::RW);
 
   ContainerInfo::DockerInfo dockerInfo;
 
@@ -1299,6 +1321,16 @@ Future<ResourceStatistics> DockerContainerizerProcess::usage(
     return Failure("Container is being removed: " + stringify(containerId));
   }
 
+  if (flags.docker_mesos_image.isSome()) {
+    // Usage gathers cgroup limits by inspecting the container's
+    // info in __usage() with the container's pid.
+    // However, since this slave instance is running in a docker
+    // container, we won't be able to inspect the cgroup info of the
+    // containers launched since they're running in the host instead
+    // of the slave's docker container.
+    return ResourceStatistics();
+  }
+
   // Skip inspecting the docker container if we already have the pid.
   if (container->pid.isSome()) {
     return __usage(containerId, container->pid.get());
@@ -1477,7 +1509,7 @@ void DockerContainerizerProcess::destroy(
   // been configured to launch but we might have recovered containers
   // on previous slave run that has configured to launch executor in
   // docker.
-  docker->stop(container->executorName(), Seconds(0), true);
+  docker->stop(container->executorName(), Seconds(0));
 
   container->state = Container::DESTROYING;
 
@@ -1554,7 +1586,12 @@ void DockerContainerizerProcess::__destroy(
 
     containers_.erase(containerId);
 
-    delay(flags.docker_remove_delay, self(), &Self::remove, container->name());
+    delay(
+      flags.docker_remove_delay,
+      self(),
+      &Self::remove,
+      container->name(),
+      container->executorName());
 
     delete container;
 
@@ -1592,7 +1629,12 @@ void DockerContainerizerProcess::___destroy(
 
   containers_.erase(containerId);
 
-  delay(flags.docker_remove_delay, self(), &Self::remove, container->name());
+  delay(
+    flags.docker_remove_delay,
+    self(),
+    &Self::remove,
+    container->name(),
+    container->executorName());
 
   delete container;
 }
@@ -1617,9 +1659,12 @@ void DockerContainerizerProcess::reaped(const ContainerID& containerId)
 }
 
 
-void DockerContainerizerProcess::remove(const string& container)
+void DockerContainerizerProcess::remove(
+    const string& container,
+    const string& executor)
 {
   docker->rm(container, true);
+  docker->rm(executor, true);
 }
 
 
