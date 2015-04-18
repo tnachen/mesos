@@ -288,6 +288,8 @@ static Try<Nothing> create(
     bool recursive)
 {
   string path = path::join(hierarchy, cgroup);
+  LOG(INFO) << "Trying to create hierarchy path '" << path << "' recursive '"
+            << stringify(recursive) << "'";
   Try<Nothing> mkdir = os::mkdir(path, recursive);
   if (mkdir.isError()) {
     return Error(
@@ -424,6 +426,8 @@ Try<string> prepare(
     const string& subsystem,
     const string& cgroup)
 {
+  LOG(INFO) << "Preparing cgroup hierarchy '" << baseHierarchy
+            << "' subsystem '" << subsystem << "' cgroup '" << cgroup << "'";
   // Ensure cgroups are enabled in the kernel.
   if (!cgroups::enabled()) {
     return Error("No cgroups support detected in this kernel");
@@ -483,6 +487,8 @@ Try<string> prepare(
   }
 
   if (!exists.get()) {
+    LOG(INFO) << "Cgroup doesn't exist, creating hierarchy '" << hierarchy.get()
+              << "' cgroup '" << cgroup << "'";
     // No cgroup exists, create it.
     Try<Nothing> create = cgroups::create(hierarchy.get(), cgroup, true);
     if (create.isError()) {
@@ -491,6 +497,7 @@ Try<string> prepare(
           path::join(hierarchy.get(), cgroup) +
           ": " + create.error());
     }
+    LOG(INFO) << "Create cgroup hierarchy successfully.";
   }
 
   // Test for nested cgroup support.
@@ -843,6 +850,8 @@ Try<Nothing> create(
     const string& cgroup,
     bool recursive)
 {
+  LOG(INFO) << "Creating hierarchy '" << hierarchy << "' cgroup '" << cgroup
+                                   << "' recursive '" << stringify(recursive) << "'";
   Option<Error> error = verify(hierarchy);
   if (error.isSome()) {
     return error.get();
