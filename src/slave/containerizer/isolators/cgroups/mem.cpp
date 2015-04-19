@@ -226,7 +226,7 @@ Future<Option<CommandInfo> > CgroupsMemIsolatorProcess::prepare(
     return Failure("Failed to prepare isolator: cgroup already exists");
   }
 
-  Try<Nothing> create = cgroups::create(hierarchy, info->cgroup);
+  Try<Nothing> create = cgroups::create(hierarchy, info->cgroup, true);
   if (create.isError()) {
     return Failure("Failed to prepare isolator: " + create.error());
   }

@@ -270,7 +270,8 @@ Future<Option<CommandInfo> > CgroupsCpushareIsolatorProcess::prepare(
       return Failure("Failed to prepare isolator: cgroup already exists");
     }
 
-    Try<Nothing> create = cgroups::create(hierarchies[subsystem], info->cgroup);
+    Try<Nothing> create =
+      cgroups::create(hierarchies[subsystem], info->cgroup, true);
     if (create.isError()) {
       return Failure("Failed to prepare isolator: " + create.error());
     }
