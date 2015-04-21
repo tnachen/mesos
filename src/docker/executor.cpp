@@ -127,7 +127,7 @@ public:
       bool retry)
   {
     if (runningSent) {
-      promise.set(Nothing());
+      promise->set(Nothing());
       return;
     }
 
