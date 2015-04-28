@@ -238,14 +238,14 @@ void Slave::initialize()
                 << " for slave: " << processes.error();
       }
 
-      // TODO(idownes): Re-evaluate this behavior if it's observed,
-      // possibly automatically killing any running processes and
-      // moving this code to during recovery.
+      // Log if there are any processes in the slave's cgroup. They
+      // may be transient processes like 'perf' or 'du', ancillary
+      // processes like 'docker log' or possibly a stuck slave.
       if (!processes.get().empty()) {
-        EXIT(1) << "A slave (or child process) is still running, "
-                << "please check the process(es) '"
-                << stringify(processes.get()) << "' listed in "
-                << path::join(hierarchy.get(), cgroup, "cgroups.proc");
+        LOG(INFO) << "A slave (or child process) is still running, "
+                  << "please check the process(es) '"
+                  << stringify(processes.get()) << "' listed in "
+                  << path::join(hierarchy.get(), cgroup, "cgroups.proc");
       }
 
       // Move all of our threads into the cgroup.
