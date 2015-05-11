@@ -1285,3 +1285,91 @@ message DiscoveryInfo {
   optional Ports ports = 6;
   optional Labels labels = 7;
 }
+
+
+/**
+* Protobuf for the Appc image manifest JSON schema.
+* https://github.com/appc/spec/blob/master/spec/aci.md#image-manifest-schema
+* Where possible, any field required in the schema is required in the
+* protobuf but some cannot be expressed, e.g., a repeated string that
+* has at least one element. Further validation should be performed
+* after parsing the JSON into the protobuf.
+*/
+message AppcImageManifest {
+  required string acKind = 1;
+  required string acVersion = 2;
+  required string name = 3;
+
+  message Label {
+    required string name = 1;
+    required string value = 2;
+  }
+
+  repeated Label labels = 4;
+
+  message App {
+    repeated string exec = 1;
+    required string user = 2;
+    required string group = 3;
+
+    message EventHandler {
+      repeated string exec = 1;
+      required string name = 2;
+    }
+
+    repeated EventHandler eventHandlers = 4;
+
+    optional string workingDirectory = 5;
+
+    message Environment {
+      required string name = 1;
+      required string value = 2;
+    }
+
+    repeated Environment environment = 6;
+
+    message Isolator {
+      required string name = 1;
+      required string value = 2;
+    }
+
+    repeated Isolator isolators = 7;
+
+    message MountPoint {
+      required string name = 1;
+      required string path = 2;
+      optional bool readOnly = 3;
+    }
+
+    repeated MountPoint mountPoints = 8;
+
+    message Port {
+      required string name = 1;
+      required string protocol = 2;
+      required uint32 port = 3;
+      optional uint32 count = 4;
+      optional bool socketActivated = 5;
+    }
+
+    repeated Port ports = 9;
+  }
+
+  optional App app = 5;
+
+  message Dependency {
+    required string imageName = 1;
+    optional string imageID = 2;
+    repeated Label labels = 3;
+  }
+
+  repeated Dependency dependencies = 6;
+
+  repeated string pathWhitelist = 7;
+
+  message Annotation {
+    required string name = 1;
+    required string value = 2;
+  }
+
+  repeated Annotation annotations = 8;
+}

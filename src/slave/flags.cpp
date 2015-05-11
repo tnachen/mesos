@@ -78,6 +78,12 @@ mesos::internal::slave::Flags::Flags()
       "Strategy for provisioning container rootfs from images",
       "copy");
 
+  add(&Flags::appc_rootfs_dir,
+      "appc_rootfs_dir",
+      "Directory the appc provisioner will store container root\n"
+      "filesystems in",
+      "/tmp/mesos/containers");
+
   add(&Flags::default_role,
       "default_role",
       "Any resources in the --resources flag that\n"
