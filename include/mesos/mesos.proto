@@ -1188,11 +1188,37 @@ message ContainerInfo {
     optional bool force_pull_image = 6;
   }
 
+  message Image {
+    enum Type {
+      APPC = 1;
+    }
+
+    message AppC {
+      // The name of the image.
+      required string name = 1;
+
+      // Image hash. Form is type-value, where type is sha512 and value is
+      // the hex encoded string value of the hash of the uncompressed tar.
+      required string id = 2;
+
+      // Optional labels. Suggested labels: "version", "os", and "arch".
+      optional Labels labels = 3;
+    }
+
+    required Type type = 1;
+    optional AppC appc = 2;
+  }
+
+  message MesosInfo {
+    optional Image image = 1;
+  }
+
   required Type type = 1;
   repeated Volume volumes = 2;
   optional string hostname = 4;
 
   optional DockerInfo docker = 3;
+  optional MesosInfo mesos = 5;
 }
 
 
