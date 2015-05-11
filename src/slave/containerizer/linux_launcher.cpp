@@ -117,7 +117,8 @@ Try<Launcher*> LinuxLauncher::create(const Flags& flags)
   }
 #endif
 
-  if (strings::contains(flags.isolation, "filesystem/shared")) {
+  if (strings::contains(flags.isolation, "filesystem/linux") ||
+      strings::contains(flags.isolation, "filesystem/shared")) {
     namespaces |= CLONE_NEWNS;
   }
 
