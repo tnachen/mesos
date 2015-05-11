@@ -53,6 +53,7 @@
 #include "slave/containerizer/isolators/filesystem/posix.hpp"
 #include "slave/containerizer/isolators/filesystem/shared.hpp"
 #include "slave/containerizer/isolators/namespaces/pid.hpp"
+
 #endif // __linux__
 #ifdef WITH_NETWORK_ISOLATOR
 #include "slave/containerizer/isolators/network/port_mapping.hpp"
@@ -60,6 +61,8 @@
 
 #include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/launch.hpp"
+
+#include "slave/containerizer/provisioners/appc.hpp"
 
 using std::list;
 using std::map;

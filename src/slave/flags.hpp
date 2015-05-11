@@ -47,6 +47,7 @@ public:
   std::string provisioner_local_dir;
   std::string provisioner_store_dir;
   std::string provisioner_backend;
+  std::string provisioner_rootfs_dir;
   std::string default_role;
   Option<std::string> attributes;
   Bytes fetcher_cache_size;

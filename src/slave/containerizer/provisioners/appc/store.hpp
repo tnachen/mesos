@@ -38,6 +38,19 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
+struct StoredImage {
+  StoredImage(
+      const std::string& _hash,
+      const JSON::Object& _manifest,
+      const std::string& _path)
+    : hash(_hash), manifest(_manifest), path(_path) {}
+
+  std::string hash;
+  JSON::Object manifest;
+  std::string path;
+};
+
+
 // Forward declaration.
 class StoreProcess;
 

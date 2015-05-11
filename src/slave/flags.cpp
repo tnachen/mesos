@@ -58,6 +58,11 @@ mesos::internal::slave::Flags::Flags()
       "provisioners",
       "Comma separated list of image rootfs provisioners.");
 
+  add(&Flags::provisioner_rootfs_dir,
+      "provisioner_rootfs_dir",
+      "Directory the provisioner will store container root filesystems in",
+      "/tmp/mesos/containers");
+
   add(&Flags::provisioner_store_dir,
       "provisioner_store_dir",
       "Directory the provisioner will store images in",
