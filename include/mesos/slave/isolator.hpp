@@ -66,9 +66,17 @@ struct Limitation
 // any dependency on RunState and in turn on internal protobufs.
 struct ExecutorRunState
 {
-  ExecutorRunState(ContainerID id_, pid_t pid_, std::string directory_)
-    : id(id_), pid(pid_), directory(directory_) {}
+  ExecutorRunState(
+      const ExecutorInfo& executorInfo_,
+      const ContainerID& id_,
+      pid_t pid_,
+      const std::string& directory_)
+    : executorInfo(executorInfo_),
+      id(id_),
+      pid(pid_),
+      directory(directory_) {}
 
+  ExecutorInfo executorInfo;
   ContainerID id;        // Container id of the last executor run.
   pid_t pid;             // Executor pid.
   std::string directory; // Executor work directory.
