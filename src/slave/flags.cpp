@@ -54,6 +54,10 @@ mesos::internal::slave::Flags::Flags()
       "for the Mesos Containerizer.",
       "posix/cpu,posix/mem");
 
+  add(&Flags::provisioners,
+      "provisioners",
+      "Comma separated list of image rootfs provisioners.");
+
   add(&Flags::default_role,
       "default_role",
       "Any resources in the --resources flag that\n"
