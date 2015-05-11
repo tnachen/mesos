@@ -1486,6 +1486,7 @@ libtestqos_controller_la_LDFLAGS = $(MESOS_TEST_MODULE_LDFLAGS)
 
 mesos_tests_SOURCES =				\
   tests/anonymous_tests.cpp			\
+  tests/appc_tests.cpp				\
   tests/attributes_tests.cpp			\
   tests/authentication_tests.cpp		\
   tests/authorization_tests.cpp		        \
