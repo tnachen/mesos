@@ -73,6 +73,11 @@ mesos::internal::slave::Flags::Flags()
       "Directory to look in for local images",
       "/tmp/mesos/images");
 
+  add(&Flags::provisioner_backend,
+      "provisioner_backend",
+      "Strategy for provisioning container rootfs from images",
+      "copy");
+
   add(&Flags::default_role,
       "default_role",
       "Any resources in the --resources flag that\n"
