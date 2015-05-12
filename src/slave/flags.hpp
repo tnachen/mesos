@@ -48,6 +48,7 @@ public:
   std::string appc_discovery;
   std::string appc_discovery_local_dir;
   std::string appc_store_dir;
+  std::string appc_backend;
   std::string default_role;
   Option<std::string> attributes;
   Bytes fetcher_cache_size;
