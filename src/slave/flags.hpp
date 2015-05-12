@@ -45,6 +45,8 @@ public:
   Option<std::string> resources;
   std::string isolation;
   Option<std::string> provisioners;
+  std::string appc_discovery;
+  std::string appc_discovery_local_dir;
   std::string default_role;
   Option<std::string> attributes;
   Bytes fetcher_cache_size;
