@@ -58,6 +58,16 @@ mesos::internal::slave::Flags::Flags()
       "provisioners",
       "Comma separated list of image rootfs provisioners.");
 
+  add(&Flags::provisioner_discovery,
+      "provisioner_discovery",
+      "Strategy for provisioner to discover images",
+      "simple");
+
+  add(&Flags::provisioner_local_dir,
+      "provisioner_local_dir",
+      "Directory to look in for local images",
+      "/tmp/mesos/images");
+
   add(&Flags::default_role,
       "default_role",
       "Any resources in the --resources flag that\n"
