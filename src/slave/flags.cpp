@@ -68,6 +68,11 @@ mesos::internal::slave::Flags::Flags()
       "Directory to look in for local images",
       "/tmp/mesos/images");
 
+  add(&Flags::appc_store_dir,
+      "appc_store_dir",
+      "Directory the appc provisioner will store images in",
+      "/tmp/mesos/store");
+
   add(&Flags::default_role,
       "default_role",
       "Any resources in the --resources flag that\n"
