@@ -58,10 +58,7 @@ void LocalReceiverProcess::receive(
     const Stage& stage)
 {
   if (fd.isNone()) {
-    string tracesPath =
-      os::hasenv("LIBPROCESS_TRACE_FILE")
-        ? os::getenv("LIBPROCESS_TRACE_FILE")
-        : "/tmp/traces";
+    string tracesPath = os::getenv("LIBPROCESS_TRACE_FILE").get("/tmp/traces");
 
     Try<int> open = os::open(
         tracesPath,
