@@ -241,7 +241,8 @@ map<string, string> executorEnvironment(
     const PID<Slave>& slavePid,
     bool checkpoint,
     const Flags& flags,
-    bool includeOsEnvironment)
+    bool includeOsEnvironment,
+    const Option<trace::Span>& span)
 {
   map<string, string> environment;
 
@@ -303,6 +304,11 @@ map<string, string> executorEnvironment(
 
   if (checkpoint) {
     environment["MESOS_RECOVERY_TIMEOUT"] = stringify(flags.recovery_timeout);
+  }
+
+  if (span.isSome()) {
+    environment["LIBPROCESS_TRACE_ID"] = stringify(span.get().traceId);
+    environment["LIBPROCESS_SPAN_ID"] = stringify(span.get().id);
   }
 
   if (HookManager::hooksAvailable()) {

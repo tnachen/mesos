@@ -490,11 +490,23 @@ void Clock::settle()
 
 static bool traceEnabled()
 {
-  static bool enabled =
-    os::hasenv("LIBPROCESS_TRACE_ENABLED") &&
-    os::getenv("LIBPROCESS_TRACE_ENABLED") == "1";
+  static bool enabled = os::getenv("LIBPROCESS_TRACE_ENABLED").get("0") == "1";
 
   return enabled;
+}
+
+
+static Option<trace::Span> parentSpan()
+{
+  static Option<trace::Span> span =
+    (os::getenv("LIBPROCESS_TRACE_ID").isSome() &&
+     os::getenv("LIBPROCESS_SPAN_ID").isSome()) ?
+    trace::Span(
+        UUID::fromString(os::getenv("LIBPROCESS_TRACE_ID").get()),
+        UUID::fromString(os::getenv("LIBPROCESS_SPAN_ID").get()))
+    : Option<trace::Span>::none();
+
+  return span;
 }
 
 
@@ -591,7 +603,10 @@ static Message* parse(Request* request)
           UUID::fromString(request->headers["Libprocess-Trace-Id"]),
           UUID::fromString(request->headers["Libprocess-Trace-SpanId"]));
     } else {
-      span = sampleSpan();
+      span = parentSpan();
+      if (span.isNone()) {
+        span = sampleSpan();
+      }
     }
   }
 
