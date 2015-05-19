@@ -18,6 +18,7 @@
  */
 
 #include "slave/containerizer/provisioners/appc/backend.hpp"
+#include "slave/containerizer/provisioners/appc/bind_backend.hpp"
 
 #include <process/collect.hpp>
 #include <process/dispatch.hpp>
@@ -40,7 +41,8 @@ namespace slave {
 Try<Owned<Backend>> Backend::create(const Flags& flags)
 {
   hashmap<string, Try<Owned<Backend>>(*)(const Flags&)> creators{
-    {"copy", &CopyBackend::create}
+    {"copy", &CopyBackend::create},
+    {"bind", &BindBackend::create}
   };
 
   if (!creators.contains(flags.provisioner_backend)) {
