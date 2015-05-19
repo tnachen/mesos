@@ -655,6 +655,7 @@ libmesos_no_3rdparty_la_SOURCES +=					\
 	slave/containerizer/provisioner.hpp				\
 	slave/containerizer/provisioners/appc.hpp			\
 	slave/containerizer/provisioners/appc/backend.hpp		\
+	slave/containerizer/provisioners/appc/bind_backend.hpp		\
 	slave/containerizer/provisioners/appc/discovery.hpp		\
 	slave/containerizer/provisioners/appc/hash.hpp			\
 	slave/containerizer/provisioners/appc/store.hpp			\
