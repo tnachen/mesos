@@ -1190,7 +1190,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
         commandInfo,
         container1,
         flags.work_dir,
-        flags.docker_sandbox_directory,
+        flags.sandbox_directory,
         resources);
 
   Future<Nothing> d2 =
@@ -1199,7 +1199,7 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Recover)
         commandInfo,
         container2,
         flags.work_dir,
-        flags.docker_sandbox_directory,
+        flags.sandbox_directory,
         resources);
 
   ASSERT_TRUE(
