@@ -62,8 +62,6 @@
 #include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/launch.hpp"
 
-#include "slave/containerizer/provisioners/appc.hpp"
-
 using std::list;
 using std::map;
 using std::string;
@@ -632,7 +630,8 @@ Future<Nothing> MesosContainerizerProcess::provision(
 
   return provisioners[type]->provision(
       containerId,
-      executorInfo.container().mesos().image())
+      executorInfo.container().mesos().image(),
+      directory)
     .then(defer(self(), [=](const string& rootfs) -> Future<Nothing> {
       if (!containers_.contains(containerId)) {
         return Failure("Container is already destroyed");

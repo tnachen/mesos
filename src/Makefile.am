@@ -530,6 +530,10 @@ if OS_LINUX
   libmesos_no_3rdparty_la_SOURCES += slave/containerizer/provisioners/appc/backend.cpp
   libmesos_no_3rdparty_la_SOURCES += slave/containerizer/provisioners/appc/discovery.cpp
   libmesos_no_3rdparty_la_SOURCES += slave/containerizer/provisioners/appc/store.cpp
+  libmesos_no_3rdparty_la_SOURCES += slave/containerizer/provisioners/docker.cpp
+  libmesos_no_3rdparty_la_SOURCES += slave/containerizer/provisioners/docker/backend.cpp
+  libmesos_no_3rdparty_la_SOURCES += slave/containerizer/provisioners/docker/discovery.cpp
+  libmesos_no_3rdparty_la_SOURCES += slave/containerizer/provisioners/docker/store.cpp
 else
   EXTRA_DIST += linux/cgroups.cpp
   EXTRA_DIST += linux/fs.cpp
@@ -659,6 +663,10 @@ libmesos_no_3rdparty_la_SOURCES +=					\
 	slave/containerizer/provisioners/appc/discovery.hpp		\
 	slave/containerizer/provisioners/appc/hash.hpp			\
 	slave/containerizer/provisioners/appc/store.hpp			\
+	slave/containerizer/provisioners/docker.hpp			\
+  slave/containerizer/provisioners/docker/backend.hpp       \
+	slave/containerizer/provisioners/docker/discovery.hpp			\
+  slave/containerizer/provisioners/docker/store.hpp         \
 	slave/resource_estimators/noop.hpp				\
 	tests/cluster.hpp						\
 	tests/containerizer.hpp						\

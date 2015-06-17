@@ -1,4 +1,3 @@
-
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -17,12 +16,13 @@
  * limitations under the License.
  */
 
-#ifndef __MESOS_APPC__
-#define __MESOS_APPC__
+#ifndef __MESOS_DOCKER__
+#define __MESOS_DOCKER__
 
 #include <list>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <stout/hashmap.hpp>
@@ -32,52 +32,81 @@
 #include <process/future.hpp>
 #include <process/owned.hpp>
 #include <process/process.hpp>
+#include <process/shared.hpp>
 
 #include <mesos/resources.hpp>
 
-#include "slave/flags.hpp"
-
 #include "slave/containerizer/provisioner.hpp"
-
-#include "slave/containerizer/provisioners/appc/store.hpp"
+#include "slave/flags.hpp"
 
 namespace mesos {
 namespace internal {
 namespace slave {
-namespace appc {
+namespace docker {
 
 // Forward declarations.
 class Backend;
 class Discovery;
 class Store;
 
-Try<Nothing> validate(const AppcImageManifest& manifest);
+struct DockerLayer {
+  DockerLayer(
+      const std::string& hash,
+      const JSON::Object& manifest,
+      const std::string& path,
+      const std::string& version,
+      const Option<process::Shared<DockerLayer>> parent)
+    : hash(hash),
+      manifest(manifest),
+      path(path),
+      version(version),
+      parent(parent) {}
 
-Try<AppcImageManifest> parse(const std::string& value);
+  DockerLayer() {}
 
-// Canonical name: {name}-{version}-{os}-{arch}
-Try<std::string> canonicalize(
-    const std::string& name,
-    const hashmap<std::string, std::string>& labels);
+  std::string hash;
+  JSON::Object manifest;
+  std::string path;
+  std::string version;
+  Option<process::Shared<DockerLayer>> parent;
+};
 
-bool matches(
-  const std::string& name,
-  const Option<std::string>& id,
-  const hashmap<std::string, std::string>& labels,
-  const StoredImage& candidate);
+
+struct DockerImage
+{
+  DockerImage(
+      const std::string& name,
+      const Option<process::Shared<DockerLayer>>& layer)
+    : name(name), layer(layer) {}
+
+  static Try<std::pair<std::string, std::string>> parseTag(
+      const std::string& name)
+  {
+    std::size_t found = name.find_last_of(':');
+    if (found == std::string::npos) {
+      return make_pair(name, "latest");
+    }
+    return make_pair(name.substr(0, found), name.substr(found + 1));
+  }
+
+  DockerImage() {}
+
+  std::string name;
+  Option<process::Shared<DockerLayer>> layer;
+};
 
 
 // Forward declaration.
-class AppcProvisionerProcess;
+class DockerProvisionerProcess;
 
-class AppcProvisioner : public Provisioner
+class DockerProvisioner : public Provisioner
 {
 public:
   static Try<process::Owned<Provisioner>> create(
       const Flags& flags,
       Fetcher* fetcher);
 
-  ~AppcProvisioner();
+  ~DockerProvisioner();
 
   virtual process::Future<Nothing> recover(
       const std::list<mesos::slave::ExecutorRunState>& states,
@@ -91,18 +120,19 @@ public:
   virtual process::Future<Nothing> destroy(const ContainerID& containerId);
 
 private:
-  AppcProvisioner(process::Owned<AppcProvisionerProcess> process);
-  AppcProvisioner(const AppcProvisioner&); // Not copyable.
-  AppcProvisioner& operator=(const AppcProvisioner&); // Not assignable.
+  DockerProvisioner(process::Owned<DockerProvisionerProcess> process);
+  DockerProvisioner(const DockerProvisioner&); // Not copyable.
+  DockerProvisioner& operator=(const DockerProvisioner&); // Not assignable.
 
-  process::Owned<AppcProvisionerProcess> process;
+  process::Owned<DockerProvisionerProcess> process;
 };
 
 
-class AppcProvisionerProcess : public process::Process<AppcProvisionerProcess>
+class DockerProvisionerProcess :
+  public process::Process<DockerProvisionerProcess>
 {
 public:
-  static Try<process::Owned<AppcProvisionerProcess>> create(
+  static Try<process::Owned<DockerProvisionerProcess>> create(
       const Flags& flags,
       Fetcher* fetcher);
 
@@ -112,49 +142,36 @@ public:
 
   process::Future<std::string> provision(
       const ContainerID& containerId,
-      const ContainerInfo::Image::AppC& image);
+      const ContainerInfo::Image::Docker& image,
+      const std::string& directory);
 
   process::Future<Nothing> destroy(const ContainerID& containerId);
 
 private:
-  AppcProvisionerProcess(
+  DockerProvisionerProcess(
       const Flags& flags,
       const process::Owned<Discovery>& discovery,
       const process::Owned<Store>& store,
       const process::Owned<Backend>& backend);
 
-  process::Future<std::vector<StoredImage>> fetchAll(
-      const std::string& name,
-      const Option<std::string>& hash,
-      const hashmap<std::string, std::string>& labels);
+  process::Future<std::string> _provision(
+      const ContainerID& containerId,
+      const DockerImage& image);
 
-  process::Future<StoredImage> fetch(
+  process::Future<DockerImage> fetch(
       const std::string& name,
-      const Option<std::string>& hash,
-      const hashmap<std::string, std::string>& labels);
-
-  process::Future<std::list<std::vector<StoredImage>>> fetchDependencies(
-      const StoredImage& image);
+      const std::string& directory);
 
   const Flags flags;
 
-  const process::Owned<Discovery> discovery;
-  const process::Owned<Store> store;
-  const process::Owned<Backend> backend;
-
-  struct Info
-  {
-    explicit Info(const std::string& _base) : base(_base) {}
-
-    const std::string base;
-  };
-
-  hashmap<ContainerID, process::Owned<Info>> infos;
+  process::Owned<Discovery> discovery;
+  process::Owned<Store> store;
+  process::Owned<Backend> backend;
 };
 
-} // namespace appc {
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {
 
-#endif // __MESOS_APPC__
+#endif // __MESOS_DOCKER__

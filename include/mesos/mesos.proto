@@ -1191,6 +1191,7 @@ message ContainerInfo {
   message Image {
     enum Type {
       APPC = 1;
+      DOCKER = 2;
     }
 
     message AppC {
@@ -1205,8 +1206,14 @@ message ContainerInfo {
       optional Labels labels = 3;
     }
 
+    message Docker {
+      // The name of the image.
+      required string name = 1;
+    }
+
     required Type type = 1;
     optional AppC appc = 2;
+    optional Docker docker = 3;
   }
 
   message MesosInfo {

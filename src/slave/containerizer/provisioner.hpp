@@ -60,7 +60,8 @@ public:
   // image.
   virtual process::Future<std::string> provision(
       const ContainerID& containerId,
-      const ContainerInfo::Image& image) = 0;
+      const ContainerInfo::Image& image,
+      const std::string& directory) = 0;
 
   // Destroy a previously provisioned root filesystem. Assumes that
   // all references (e.g., mounts, open files) to the provisioned

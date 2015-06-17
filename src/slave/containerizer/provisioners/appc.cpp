@@ -197,7 +197,8 @@ Future<Nothing> AppcProvisioner::recover(
 
 Future<string> AppcProvisioner::provision(
     const ContainerID& containerId,
-    const ContainerInfo::Image& image)
+    const ContainerInfo::Image& image,
+    const string& directory)
 {
   if (image.type() != ContainerInfo::Image::APPC) {
     return Failure("Unsupported container image type");
