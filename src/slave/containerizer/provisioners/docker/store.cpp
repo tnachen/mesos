@@ -127,7 +127,7 @@ StoreProcess::StoreProcess(
 
 Future<DockerImage> StoreProcess::put(const string& uri, const string& name)
 {
-  Try<bool> isDir = os::stat::isdir(uri); 
+  Try<bool> isDir = os::stat::isdir(uri);
   if (!isDir.isSome() || isDir.get() == false) {
     return Error("Failure image uri is not a directory " + uri);
   }
@@ -153,7 +153,7 @@ Future<DockerImage> StoreProcess::put(const string& uri, const string& name)
     return Error("Failed to parse name into repo and tag " + repoTag.error());
   }
 
-  Result<JSON::String> layerId = 
+  Result<JSON::String> layerId =
     json.find<JSON::String>(repository + "." + tag);
   Try<string> layerUri = path::join("file:///", uri, layerId);
   if (layerUri.isError()) {
@@ -165,7 +165,7 @@ Future<DockerImage> StoreProcess::put(const string& uri, const string& name)
       Try<DockerImage> image = DockerImage(name, layer);
       if (image.isError()) {
         return Error("Docker Image constructor failed " + image.error());
-      } 
+      }
 
       images[name] = image;
       return image;
@@ -227,7 +227,7 @@ Future<DockerLayer> StoreProcess::storeLayer(const string& stage, const string& 
 {
   Try<string> hash = os::basename(uri);
   if (hash.isError()) {
-    return Error("Failed to determine hash for stored layer: " + hash.error()); 
+    return Error("Failed to determine hash for stored layer: " + hash.error());
   }
 
   // Rename the stage/XXX to store/hash.
