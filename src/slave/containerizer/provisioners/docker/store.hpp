@@ -16,6 +16,7 @@
  * limitations under the License.
  */
 
+<<<<<<< HEAD
 #ifndef __MESOS_DOCKER_STORE__
 #define __MESOS_DOCKER_STORE__
 
@@ -33,6 +34,26 @@
 #include "slave/flags.hpp"
 
 #include "slave/containerizer/provisioners/docker.hpp"
+=======
+#include <list>
+
+#include <stout/os.hpp>
+
+#include <process/defer.hpp>
+#include <process/dispatch.hpp>
+
+#include <glog/logging.h>
+
+#include "slave/containerizer/fetcher.hpp"
+
+#include "slave/containerizer/provisioners/docker/hash.hpp"
+#include "slave/containerizer/provisioners/docker/store.hpp"
+
+using namespace process;
+
+using std::list;
+using std::string;
+using std::vector;
 
 namespace mesos {
 namespace internal {
