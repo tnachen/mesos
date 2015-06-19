@@ -19,6 +19,9 @@
 #ifndef __MESOS_DOCKER_STORE__
 #define __MESOS_DOCKER_STORE__
 
+#include <string>
+#include <vector>
+
 #include <stout/hashmap.hpp>
 #include <stout/option.hpp>
 #include <stout/result.hpp>
@@ -26,13 +29,10 @@
 
 #include <process/future.hpp>
 #include <process/process.hpp>
-
-#include <string>
-#include <vector>
-
-#include "slave/flags.hpp"
+#include <process/shared.hpp>
 
 #include "slave/containerizer/provisioners/docker.hpp"
+#include "slave/flags.hpp"
 
 namespace mesos {
 namespace internal {
@@ -58,12 +58,11 @@ public:
       const std::string& uri,
       const std::string& name);
 
-  // Get all images matched by name.
-  process::Future<std::vector<DockerImage>> get(const std::string& name);
+  // Get image by name.
+  process::Future<Option<DockerImage>> get(const std::string& name);
 
-  // Get a specific image matched by name and hash.
-  process::Future<Option<DockerImage>> get(
-      const std::string& name,
+  // Get a specific layer matched by hash.
+  process::Future<Option<process::Shared<DockerLayer>>> getLayer(
       const std::string& hash);
 
 private:
@@ -85,12 +84,13 @@ public:
       const Flags& flags,
       Fetcher* fetcher);
 
-  process::Future<DockerImage> put(const std::string& uri, const string& name);
+  process::Future<DockerImage> put(
+      const std::string& uri,
+      const std::string& name);
 
-  process::Future<std::vector<DockerImage>> get(const std::string& name);
+  process::Future<Option<DockerImage>> get(const std::string& name);
 
-  process::Future<Option<DockerImage>> get(
-      const std::string& name,
+  process::Future<Option<process::Shared<DockerLayer>>> getLayer(
       const std::string& hash);
 
 private:
@@ -102,15 +102,20 @@ private:
 
   Try<Nothing> restore();
 
-  process::Future<DockerLayer> putLayer(const string& uri);
+  process::Future<process::Shared<DockerLayer>> putLayer(
+      const std::string& uri);
 
-  process::Future<Nothing> fetchLayer(const string& stage, const string&u uri);
+  process::Future<Nothing> fetchLayer(
+      const std::string& stage,
+      const std::string& uri);
 
-  process::Future<DockerLayer> storeLayer(
-      const string& stage,
-      const string& uri);
+  process::Future<process::Shared<DockerLayer>> storeLayer(
+      const std::string& stage,
+      const std::string& uri);
 
-  process::Future<DockerLayer> entry(const string& store, const string& uri);
+  process::Future<process::Shared<DockerLayer>> entry(
+      const std::string& store,
+      const std::string& uri);
 
 
   const Flags flags;
@@ -118,9 +123,9 @@ private:
   const std::string storage;
 
   // name -> DockerImage
-  std::hashmap<std::string, DockerImage> images;
+  hashmap<std::string, DockerImage> images;
   // hash -> DockerLayer
-  hashmap<std::string, DockerLayer>> layers; 
+  hashmap<std::string, process::Shared<DockerLayer>> layers;
 
   Fetcher* fetcher;
 };
