@@ -1112,6 +1112,7 @@ message ContainerInfo {
   message Image {
     enum Type {
       APPC = 1;
+      DOCKER = 2;
     }
 
     message AppC {
@@ -1126,8 +1127,32 @@ message ContainerInfo {
       optional Labels labels = 3;
     }
 
+    message DockerImageLayer {
+      // Image layer hash, also known as image id.
+      required string hash = 1;
+
+      // Path to where the image is stored in memory.
+      required string path = 2;
+
+      // Version of image layer specification.
+      required string version = 3;
+
+      // Optional parent image layer hash.
+      optional string parent = 4;
+    }
+
+    message Docker {
+      // The name of the image.
+      required string name = 1;
+
+      // The docker image layer corresponding to a docker image.
+      required DockerImageLayer layer = 2;
+
+    }
+
     required Type type = 1;
     optional AppC appc = 2;
+    optional Docker docker = 3;
   }
 
   message MesosInfo {

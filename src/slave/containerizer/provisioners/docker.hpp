@@ -23,6 +23,7 @@
 #include <list>
 #include <sstream>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include <stout/hashmap.hpp>
@@ -32,12 +33,12 @@
 #include <process/future.hpp>
 #include <process/owned.hpp>
 #include <process/process.hpp>
+#include <process/shared.hpp>
 
 #include <mesos/resources.hpp>
 
-#include "slave/flags.hpp"
-
 #include "slave/containerizer/provisioner.hpp"
+#include "slave/flags.hpp"
 
 namespace mesos {
 namespace internal {
@@ -54,46 +55,44 @@ struct DockerLayer {
       const JSON::Object& manifest,
       const std::string& path,
       const std::string& version,
-      const Option<DockerLayer>& parent)
+      const Option<process::Shared<DockerLayer>> parent)
     : hash(hash),
       manifest(manifest),
       path(path),
       version(version),
       parent(parent) {}
 
-    Try<DockerLayer> parse(JSON::Object manifest, path, version)
+  DockerLayer() {}
 
-    const std::string hash,
-    const std::string manifest,
-    const std::string path,
-    const std::string version,
-    const Option<DockerLayer> parent
+  std::string hash;
+  JSON::Object manifest;
+  std::string path;
+  std::string version;
+  Option<process::Shared<DockerLayer>> parent;
 };
 
 
-struct DockerImage 
+struct DockerImage
 {
-    DockerImage(
+  DockerImage(
       const std::string& name,
-      const DockerLayer& layer)
-    :name(_name), layer(_layer) {}
+      const Option<process::Shared<DockerLayer>>& layer)
+    : name(name), layer(layer) {}
 
-  const std::string name;
-  const DockerLayer layer;
-
-  
-
-  static Try<std::pair<std::string, std::string>> parseTag(const std::string& name)
+  static Try<std::pair<std::string, std::string>> parseTag(
+      const std::string& name)
   {
     std::size_t found = name.find_last_of(':');
     if (found == std::string::npos) {
       return make_pair(name, "latest");
     }
-    return make_pair(name.substr(0, found), name.substr(found + 1)); 
+    return make_pair(name.substr(0, found), name.substr(found + 1));
   }
 
-  static Try<DockerImage> parse(const std::string& uri);
+  DockerImage() {}
 
+  std::string name;
+  Option<process::Shared<DockerLayer>> layer;
 };
 
 
@@ -128,7 +127,8 @@ private:
 };
 
 
-class DockerProvisionerProcess : public process::Process<DockerProvisionerProcess>
+class DockerProvisionerProcess :
+  public process::Process<DockerProvisionerProcess>
 {
 public:
   static Try<process::Owned<DockerProvisionerProcess>> create(
@@ -155,25 +155,9 @@ private:
 
   process::Future<std::string> _provision(
       const ContainerID& containerId,
-      const std::vector<DockerImage>& images);
-
-  //made name optional, make id not optional see fetch 
-  process::Future<std::vector<DockerImage>> fetch(
-      const std::string& name,
-      const Option<std::string>& hash,
-      const hashmap<std::string, std::string>& labels);
-
-  process::Future<std::vector<DockerImage>> _fetch(
-      const std::string& name,
-      const Option<std::string>& hash,
-      const std::vector<DockerImage>& candidates);
-
-  process::Future<std::vector<DockerImage>> fetchDependencies(
       const DockerImage& image);
 
-  process::Future<std::vector<DockerImage>> _fetchDependencies(
-      const DockerImage& image,
-      const std::list<std::vector<DockerImage>>& dependencies);
+  process::Future<DockerImage> fetch(const std::string& name);
 
   const Flags flags;
 

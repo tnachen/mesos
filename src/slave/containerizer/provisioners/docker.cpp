@@ -47,76 +47,6 @@ namespace internal {
 namespace slave {
 
 
-Try<JSON::Object> DockerImage::parse(const std::string& value)
-{
-  // Convert from string or file to JSON.
-  Try<JSON::Object> json = JSON::parse<JSON::Object>(value);
-  if (json.isError()) {
-    return Error(json.error());
-  }
-
-  // XXX Validate the JSON according to the appropriate schema.
-  return json;
-}
-
-
-bool DockerImage::matches(
-    const Option<string>& name,
-    const string& hash,
-    const DockerImage& candidate)
-{
-  // The hash must match.
-  if (candidate.hash != hash) {
-    return false;
-  }
-
-  // If a name is specified the candidate must match.
-  if (name.isSome() && candidate.name != name.get()) {
-    return false;
-  }
-
-  return true;
-}
-
-
-Try<DockerImage> DockerImage::parse(
-    const string& manifest,
-    const string& hash,
-    const string& version,
-    const string& path)
-{
-  Try<JSON::Object> json = JSON::parse<JSON::Object>(manifest);
-  if (json.isError()) {
-    return Error("Failed to parse manifest json: " + json.error());
-  }
-
-  Option <std::string>
-
-  // Parse the hash.
-  Result<JSON::String> hash = json.get().find<JSON::String>("id");
-  if (name.isNone()) {
-    return Error("Failed to find name in manifest");
-  }
-  if (name.isError()) {
-    return Error("Failed to parse name from manifest: " + name.error());
-  }
-
-  // Parse the dependencies.
-  Try<vector<Dependency>> dependencies_ = parseDependencies(json.get());
-  if (dependencies_.isError()) {
-    return Error("Failed to parse dependencies: " + dependencies_.error());
-  }
-
-  return DockerImage(
-      name.get().value,
-      labels_.get(),
-      hash,
-      dependencies_.get(),
-      path,
-      json.get());
-}
-
-
 Try<Owned<Provisioner>> DockerProvisioner::create(
     const Flags& flags,
     Fetcher* fetcher)
@@ -246,14 +176,7 @@ Future<string> DockerProvisionerProcess::provision(
     const ContainerID& containerId,
     const ContainerInfo::Image::Docker& image)
 {
-  // TODO(idownes): Check containerId not already provision{ing,ed}.
-
-  hashmap<string, string> labels;
-  foreach (const Label& label, image.labels().labels()) {
-    labels[label.key()] = label.value();
-  }
-
-  return fetch(image.name(), image.id(), labels)
+  return fetch(image.name())
     .then(defer(self(),
                 &Self::_provision,
                 containerId,
@@ -263,8 +186,9 @@ Future<string> DockerProvisionerProcess::provision(
 
 Future<string> DockerProvisionerProcess::_provision(
     const ContainerID& containerId,
-    const vector<DockerImage>& images)
+    const DockerImage& image)
 {
+  /*
   // Create root directory.
   string base = path::join(flags.provisioner_rootfs_dir,
                            stringify(containerId));
@@ -294,136 +218,33 @@ Future<string> DockerProvisionerProcess::_provision(
 
       return rootfs;
     });
+  */
+  return "";
 }
 
 
 // Fetch an image and all dependencies.
-Future<vector<DockerImage>> DockerProvisionerProcess::fetch(
-    const string& name,
-    const Option<string>& hash,
-    const hashmap<string, string>& labels)
+Future<DockerImage> DockerProvisionerProcess::fetch(const string& name)
 {
   return store->get(name)
-    .then(defer(self(),
-                &Self::_fetch,
-                name,
-                hash,
-                lambda::_1));
+    .then([=](const Option<DockerImage>& image) -> Future<DockerImage> {
+      if (image.isSome()) {
+        return image.get();
+      }
+
+      return discovery->discover(name)
+        .then([=](const string& uri) -> Future<DockerImage> {
+          return store->put(uri, name);
+        });
+    });
 }
 
 
-Future<vector<DockerImage>> DockerProvisionerProcess::_fetch(
-    const string& name,
-    const Option<string>& hash,
-    const vector<DockerImage>& candidates)
+Future<Nothing> DockerProvisionerProcess::destroy(
+    const ContainerID& containerId)
 {
-  foreach (const DockerImage& candidate, candidates) {
-    if (DockerImage::matches(name, hash, labels, candidate)) {
-      LOG(INFO) << "Found matching image in store for image '" << name << "'";
-
-      return fetchDependencies(candidate);
-    }
-  }
-
-  LOG(INFO) << "No match found for image '" << name << "'"
-            << " in image store, starting discovery";
-
-  return discovery->discover(name, labels, hash)
-    .then(defer(self(), [=](const string& uri) { return store->put(uri); }))
-    .then(defer(self(), [=](const DockerImage& candidate) -> Future<DockerImage> {
-            if (DockerImage::matches(name, hash, labels, candidate)) {
-              return candidate;
-            }
-
-            return Failure("Fetched image (" + candidate.name + ", " +
-                           candidate.hash + ")" +
-                           "' does not match (" + name + ", " + "'" +
-                           (hash.isSome() ? hash.get() : "no id") + ")");
-          }))
-    .then(defer(self(),
-                &Self::fetchDependencies,
-                lambda::_1));
-}
-
-
-Future<vector<DockerImage>> DockerProvisionerProcess::fetchDependencies(
-    const DockerImage& image)
-{
-  Result<JSON::Array> dependencies =
-    image.manifest.find<JSON::Array>("dependencies");
-
-  if (dependencies.isNone() ||
-      dependencies.get().values.size() == 0) {
-    // We're at a leaf layer.
-    return vector<DockerImage>{image};
-  }
-
-  // Sequentially fetch dependencies.
-  // TODO(idownes): Detect recursive dependencies.
-  // TODO(idownes): Consider fetching in parallel?
-  list<Future<vector<DockerImage>>> futures;
-
-  foreach (const JSON::Value& dependency, dependencies.get().values) {
-    CHECK(dependency.is<JSON::Object>());
-
-    JSON::Object json = dependency.as<JSON::Object>();
-
-    Result<JSON::String> name = json.find<JSON::String>("imageName");
-    if (!name.isSome()) {
-      return Failure("Failed to parse dependency name");
-    }
-
-    Result<JSON::String> id = json.find<JSON::String>("imageID");
-    if (id.isError()) {
-      return Failure("Failed to parse dependency id");
-    }
-
-    LOG(INFO) << "Fetching dependency '" << name.get().value << "'";
-
-    if (futures.empty()) {
-      Future<vector<DockerImage>> f = vector<DockerImage>();
-      futures.push_back(f.then(defer(self(),
-                                     &Self::fetch,
-                                     name.get().value,
-                                     id.isSome() ? id.get().value
-                                                 : Option<string>(),
-                                     labels.get())));
-    } else {
-      futures.push_back(
-          futures.back().then(defer(self(),
-                                    &Self::fetch,
-                                    name.get().value,
-                                    id.isSome() ? id.get().value
-                                                : Option<string>(),
-                                    labels.get())));
-    }
-  }
-
-  return collect(futures)
-    .then(defer(self(), &Self::_fetchDependencies, image, lambda::_1));
-}
-
-
-Future<vector<DockerImage>> DockerProvisionerProcess::_fetchDependencies(
-    const DockerImage& image,
-    const list<vector<DockerImage>>& dependencies)
-{
-  vector<DockerImage> images;
-
-  CHECK(dependencies.size());
-  foreach (const vector<DockerImage>& dependency, dependencies) {
-    CHECK(dependency.size());
-    images.insert(images.end(), dependency.begin(), dependency.end());
-  }
-
-  images.push_back(image);
-
-  return images;
-}
-
-
-Future<Nothing> DockerProvisionerProcess::destroy(const ContainerID& containerId)
-{
+  return Nothing();
+  /*
   string base = path::join(flags.provisioner_rootfs_dir,
                            stringify(containerId));
 
@@ -446,6 +267,8 @@ Future<Nothing> DockerProvisionerProcess::destroy(const ContainerID& containerId
   }
 
   return backend->destroy(base);
+
+  */
 }
 
 } // namespace slave {
