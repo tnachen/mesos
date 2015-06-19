@@ -1,4 +1,3 @@
-
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -61,39 +60,37 @@ struct DockerLayer {
       version(version),
       parent(parent) {}
 
-    Try<DockerLayer> parse(JSON::Object manifest, path, version)
+  Try<DockerLayer> parse(JSON::Object manifest, path, version);
 
-    const std::string hash,
-    const std::string manifest,
-    const std::string path,
-    const std::string version,
-    const Option<DockerLayer> parent
+  const std::string hash;
+  const std::string manifest;
+  const std::string path;
+  const std::string version;
+  const Option<DockerLayer> parent;
 };
 
 
-struct DockerImage 
+struct DockerImage
 {
-    DockerImage(
+  DockerImage(
       const std::string& name,
       const DockerLayer& layer)
-    :name(_name), layer(_layer) {}
+    : name(_name), layer(_layer) {}
 
-  const std::string name;
-  const DockerLayer layer;
-
-  
-
-  static Try<std::pair<std::string, std::string>> parseTag(const std::string& name)
+  static Try<std::pair<std::string, std::string>> parseTag(
+      const std::string& name)
   {
     std::size_t found = name.find_last_of(':');
     if (found == std::string::npos) {
       return make_pair(name, "latest");
     }
-    return make_pair(name.substr(0, found), name.substr(found + 1)); 
+    return make_pair(name.substr(0, found), name.substr(found + 1));
   }
 
   static Try<DockerImage> parse(const std::string& uri);
 
+  const std::string name;
+  const DockerLayer layer;
 };
 
 
@@ -157,7 +154,7 @@ private:
       const ContainerID& containerId,
       const std::vector<DockerImage>& images);
 
-  //made name optional, make id not optional see fetch 
+  //made name optional, make id not optional see fetch
   process::Future<std::vector<DockerImage>> fetch(
       const std::string& name,
       const Option<std::string>& hash,

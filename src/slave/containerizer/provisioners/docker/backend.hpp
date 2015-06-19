@@ -35,8 +35,8 @@ namespace mesos {
 namespace internal {
 namespace slave {
 
-// Provision a root filesystem for a container, built from the
-// specified layers.
+// Provision a root filesystem for a docker container, built from the
+// specified docker layers.
 class Backend
 {
 public:
@@ -47,7 +47,7 @@ public:
   // Provision a root filesystem for a container using the specified
   // image.
   virtual process::Future<Nothing> provision(
-      const std::vector<DockerImage>& images,
+      const DockerImage& image,
       const std::string& directory) = 0;
 
   // Destroy the root filesystem at the specified path.
@@ -66,7 +66,7 @@ public:
   static Try<process::Owned<Backend>> create(const Flags& flags);
 
   virtual process::Future<Nothing> provision(
-      const std::vector<DockerImage>& images,
+      const DockerImage& image,
       const std::string& directory);
 
   virtual process::Future<Nothing> destroy(const std::string& directory);
@@ -87,7 +87,7 @@ public:
   CopyBackendProcess() {}
 
   process::Future<Nothing> provision(
-      const std::vector<DockerImage>& images,
+      const DockerImage& image,
       const std::string& directory);
 
   process::Future<Nothing> destroy(const std::string& directory);

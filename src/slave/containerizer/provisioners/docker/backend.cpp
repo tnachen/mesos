@@ -41,8 +41,7 @@ namespace slave {
 Try<Owned<Backend>> Backend::create(const Flags& flags)
 {
   hashmap<string, Try<Owned<Backend>>(*)(const Flags&)> creators{
-    {"copy", &CopyBackend::create},
-    {"bind", &BindBackend::create}
+    {"changeset", &CopyBackend::create},
   };
 
   if (!creators.contains(flags.provisioner_backend)) {
@@ -77,13 +76,13 @@ Try<Owned<Backend>> CopyBackend::create(const Flags& flags)
 
 
 Future<Nothing> CopyBackend::provision(
-    const vector<DockerImage>& images,
+    const DockerImage& image,
     const string& directory)
 {
   return dispatch(
       process.get(),
       &CopyBackendProcess::provision,
-      images,
+      image,
       directory);
 }
 
@@ -98,16 +97,23 @@ Future<Nothing> CopyBackend::destroy(const string& directory)
 
 
 Future<Nothing> CopyBackendProcess::provision(
-    const vector<DockerImage>& images,
+    const DockerImage& image,
     const string& directory)
 {
+  list<DockerLayer> layers;
   list<Future<Nothing>> futures{Nothing()};
 
-  foreach (const DockerImage& image, images)
+  Option<DockerLayer> layer = image.layer;
+  while (layer.isSome()) {
+    layers.push_front(layer.get());
+    layer = layer.get().parent;
+  }
+
+  foreach (const DockerLayer& layer, layers)
   {
     futures.push_back(
         futures.back().then(
-          defer(self(), &Self::_provision, image, directory)));
+          defer(self(), &Self::_provision, layer, directory)));
   }
 
   return collect(futures)
@@ -117,15 +123,17 @@ Future<Nothing> CopyBackendProcess::provision(
 
 
 Future<Nothing> CopyBackendProcess::_provision(
-  const DockerImage& image,
+  const string name,
+  const DockerLayer& layer,
   const string& directory)
 {
-  LOG(INFO) << "Provisioning image layer '" + image.name + "' to " + directory;
+  LOG(INFO) << "Provisioning image '" << image << "' layer '" << layer.hash
+            << "' to " << directory;
 
   vector<string> argv{
     "cp",
     "--archive",
-    path::join(image.path, "rootfs"),
+    path::join(layer.path, "rootfs"),
     directory
   };
 
