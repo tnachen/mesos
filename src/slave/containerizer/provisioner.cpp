@@ -22,6 +22,7 @@
 #include "slave/containerizer/provisioner.hpp"
 
 #include "slave/containerizer/provisioners/appc.hpp"
+#include "slave/containerizer/provisioners/docker.hpp"
 
 using namespace process;
 
@@ -49,6 +50,13 @@ Try<hashmap<ContainerInfo::Image::Type, Owned<Provisioner>>>
       }
 
       provisioners[ContainerInfo::Image::APPC] = create.get();
+    } else if (type == "docker") {
+        Try<Owned<Provisioner>> create = DockerProvisioner::create(flags, fetcher);
+        if (create.isError()) {
+          return Error("Failed to create docker provisioner: " + create.error());
+        }
+
+        provisioners[ContainerInfo::Image::DOCKER] = create.get();
     } else {
       return Error("Unknown or unsupported provisioner '" + type + "'");
     }
