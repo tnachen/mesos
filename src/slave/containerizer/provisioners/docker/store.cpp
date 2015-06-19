@@ -17,8 +17,10 @@
  */
 
 #include <list>
+#include <utility>
 
 #include <stout/os.hpp>
+#include <stout/json.hpp>
 
 #include <process/defer.hpp>
 #include <process/dispatch.hpp>
@@ -27,7 +29,6 @@
 
 #include "slave/containerizer/fetcher.hpp"
 
-#include "slave/containerizer/provisioners/docker/hash.hpp"
 #include "slave/containerizer/provisioners/docker/store.hpp"
 
 using namespace process;
@@ -35,6 +36,7 @@ using namespace process;
 using std::list;
 using std::string;
 using std::vector;
+using std::pair;
 
 namespace mesos {
 namespace internal {
@@ -74,15 +76,15 @@ Future<DockerImage> Store::put(const string& uri, const string& name)
 }
 
 
-Future<vector<DockerImage>> Store::get(const string& name)
+Future<Option<DockerImage>> Store::get(const string& name)
 {
   return dispatch(process.get(), &StoreProcess::get, name);
 }
 
 
-Future<Option<DockerImage>> Store::get(const string& name, const string& hash)
+Future<Option<Shared<DockerLayer>>> Store::getLayer(const string& hash)
 {
-  return dispatch(process.get(), &StoreProcess::get, name, hash);
+  return dispatch(process.get(), &StoreProcess::getLayer, hash);
 }
 
 
@@ -127,53 +129,57 @@ StoreProcess::StoreProcess(
 
 Future<DockerImage> StoreProcess::put(const string& uri, const string& name)
 {
-  Try<bool> isDir = os::stat::isdir(uri); 
+  Try<bool> isDir = os::stat::isdir(uri);
   if (!isDir.isSome() || isDir.get() == false) {
-    return Error("Failure image uri is not a directory " + uri);
+    return Failure("Failure image uri is not a directory " + uri);
   }
 
   // Read repository json
   Try<string> repoPath = path::join("file:///", uri, "repositories");
-  if (path.isError()) {
-    return Error("Failure to create path to repository " + path.error());
+  if (repoPath.isError()) {
+    return Failure("Failure to create path to repository: " + repoPath.error());
   }
 
   Try<string> value = os::read(repoPath.get());
   if (value.isError()) {
-    return Error("Failed to read repository JSON " + value.error());
+    return Failure("Failed to read repository JSON: " + value.error());
   }
 
   Try<JSON::Object> json = JSON::parse<JSON::Object>(value.get());
   if (json.isError()) {
-    return Error("Failed to parse JSON " + json.error());
+    return Failure("Failed to parse JSON: " + json.error());
   }
 
-  Try<pair<string, string>> repoTag = parseTag(name);
+  Try<pair<string, string>> repoTag = DockerImage::parseTag(name);
   if (repoTag.isError()) {
-    return Error("Failed to parse name into repo and tag " + repoTag.error());
+    return Failure("Failed to parse Docker image name: " + repoTag.error());
   }
 
-  Result<JSON::String> layerId = 
-    json.find<JSON::String>(repository + "." + tag);
-  Try<string> layerUri = path::join("file:///", uri, layerId);
+  string repository = repoTag.get().first;
+  string tag = repoTag.get().second;
+
+  Result<JSON::String> layerId =
+    json.get().find<JSON::String>(repository + "." + tag);
+  if (layerId.isError()) {
+    return Failure(
+      "Failed to find layer id of image layer: " + layerId.error());
+  }
+
+  Try<string> layerUri = path::join("file:///", uri, layerId.get().value);
   if (layerUri.isError()) {
-    return Error("Failed to create path to image layer" + layerUri.error());
+    return Failure("Failed to create path to image layer: " + layerUri.error());
   }
 
-  return putImageLayer(layerUri)
-    .then([=](const DockerLayer& layer) {
-      Try<DockerImage> image = DockerImage(name, layer);
-      if (image.isError()) {
-        return Error("Docker Image constructor failed " + image.error());
-      } 
-
+  return putLayer(layerUri.get())
+    .then([=](const Shared<DockerLayer>& layer) -> Future<DockerImage> {
+      DockerImage image = DockerImage(name, layer);
       images[name] = image;
       return image;
     });
 }
 
 
-Future<DockerLayer> StoreProcess::putLayer(const string& uri)
+Future<Shared<DockerLayer>> StoreProcess::putLayer(const string& uri)
 {
   Try<string> stage = os::mkdtemp(path::join(staging, "XXXXXX"));
   if (stage.isError()) {
@@ -223,16 +229,19 @@ Future<Nothing> StoreProcess::fetchLayer(const string& stage, const string& uri)
 }
 
 
-Future<DockerLayer> StoreProcess::storeLayer(const string& stage, const string& uri)
+Future<Shared<DockerLayer>> StoreProcess::storeLayer(
+    const string& stage,
+    const string& uri)
 {
   Try<string> hash = os::basename(uri);
   if (hash.isError()) {
-    return Error("Failed to determine hash for stored layer: " + hash.error()); 
+    return Failure(
+      "Failed to determine hash for stored layer: " + hash.error());
   }
 
   // Rename the stage/XXX to store/hash.
   // Only rename if the store directory doesn't exist.
-  string store = path::join(storage, hash);
+  string store = path::join(storage, hash.get());
 
   if (os::exists(store)) {
     LOG(INFO) << "Layer store '" << store << "' exists, skipping rename";
@@ -245,74 +254,78 @@ Future<DockerLayer> StoreProcess::storeLayer(const string& stage, const string& 
   }
 
   return entry(store, uri)
-    .then([=](const DockerLayer& layer) {
-      if (layer.isError()) {
-        Try<Nothing> rmdir = os::rmdir(store);
-        if (rmdir.isError()) {
-          LOG(WARNING) << "Failed to remove invalid layer in store "
-                      << store << ": " << rmdir.error();
-        }
-        return Failure("Failed to identify layer in store: " + layer.error());
-      }
+    .then([=](const Shared<DockerLayer>& layer) {
+      LOG(INFO) << "Stored layer with hash: " << hash.get();
 
-      LOG(INFO) << "Stored layer with hash " << hash;
+      layers[hash.get()] = layer;
 
-      layers[hash] = layer.get();
-
-      return layer.get();
+      return layer;
     });
 }
 
-Future<DockerLayer> entry(const string& store, const string& uri)
+Future<Shared<DockerLayer>> StoreProcess::entry(
+    const string& store,
+    const string& uri)
 {
   Result<string> realpath = os::realpath(store);
   if (realpath.isError()) {
-    return Error("Error in checking store path: " + realpath.error());
+    return Failure("Error in checking store path: " + realpath.error());
   } else if (realpath.isNone()) {
-    return Error("StoreProcess path not found");
+    return Failure("StoreProcess path not found");
   }
 
   Try<string> hash = os::basename(realpath.get());
   if (hash.isError()) {
-    return Error("Failed to determine hash for stored image: " + hash.error());
+    return Failure(
+      "Failed to determine hash for stored image: " + hash.error());
+  }
 
   Try<string> version = os::read(path::join(store, "VERSION"));
   if(version.isError()) {
-    return Error ("Failed to determine version of json: " + version.error());
+    return Failure("Failed to determine version of json: " + version.error());
   }
 
   Try<string> manifest = os::read(path::join(store, "manifest"));
   if (manifest.isError()) {
-    return Error("Failed to read manifest: " + manifest.error());
+    return Failure("Failed to read manifest: " + manifest.error());
   }
 
-  Try<JSON::Object> json = parse(manifest);
+  Try<JSON::Object> json = JSON::parse<JSON::Object>(manifest.get());
   if (json.isError()) {
-    return Error("Failed to parse manifest");
+    return Failure("Failed to parse manifest: " + json.error());
   }
 
-  Result<string> parentId = json.find("parent");
+  Result<JSON::String> parentId = json.get().find<JSON::String>("parent");
   if (parentId.isNone()) {
-    return DockerLayer(hash, json.get(), path, version.get(), Nothing());
+    return Shared<DockerLayer> (new DockerLayer(
+        hash.get(),
+        json.get(),
+        realpath.get(),
+        version.get(),
+        None()));
   } else if (parentId.isError()) {
-    return Error("Failed to read parent of layer " + parentId.error));
-  } else {
-    Try<string> parentUri = os::join(os::dirname(uri), parentId);
-    if (parentUri.isError()) {
-      return Error("Failed to create parent layer uri " + parentUri.error());
-    }
-
-    return putLayer(parentUri)
-      .onAny([=](const Future<DockerLayer>& parent) {
-        if(parent.isReady()) {
-          return DockerLayer(hash, json.get(), uri, version.get(), parent.get());
-        } else if (parent.isFailed()) {
-          return Error("Parent layer failed with failure " + parent.failure());
-        } else if (parent.isDiscarded()) {
-          return Error("Parent layer was discarded");
-        }
-      });
+    return Failure("Failed to read parent of layer: " + parentId.error());
   }
+
+  Try<string> uriDir = os::dirname(uri);
+  if (uriDir.isError()) {
+    return Failure("Failed to obtain layer directory: " + uriDir.error());
+  }
+
+  Try<string> parentUri = path::join(uriDir.get(), parentId.get().value);
+  if (parentUri.isError()) {
+    return Failure("Failed to create parent layer uri: " + parentUri.error());
+  }
+
+  return putLayer(parentUri.get())
+    .onAny([=](const Shared<DockerLayer>& parent) -> Shared<DockerLayer> {
+        return Shared<DockerLayer> (new DockerLayer(
+            hash.get(),
+            json.get(),
+            uri,
+            version.get(),
+            parent));
+    });
 }
 
 
@@ -326,9 +339,9 @@ Future<Option<DockerImage>> StoreProcess::get(const string& name)
 }
 
 
-Future<Option<DockerLayer>> StoreProcess::get(const string& hash)
+Future<Option<Shared<DockerLayer>>> StoreProcess::getLayer(const string& hash)
 {
-  if(!layers.contains(hash)) {
+  if (!layers.contains(hash)) {
     return None();
   }
 
@@ -339,6 +352,7 @@ Future<Option<DockerLayer>> StoreProcess::get(const string& hash)
 Try<Nothing> StoreProcess::restore()
 {
   // Remove anything in staging.
+  /*
   Try<list<string>> entries = os::ls(staging);
   if (entries.isError()) {
     return Error("Failed to list storage entries: " + entries.error());
@@ -372,11 +386,12 @@ Try<Nothing> StoreProcess::restore()
     }
 
     LOG(INFO) << "Restored layer '" << layer.get().hash << "'";
-    layers[layer.get().hash] = layer.get(); 
+    layers[layer.get().hash] = layer.get();
   }
-
+  */
   return Nothing();
 }
+
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

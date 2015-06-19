@@ -39,10 +39,7 @@ public:
 
   static Try<process::Owned<Discovery>> create(const Flags& flags);
 
-  virtual process::Future<std::string> discover(
-      const Option<std::string>& repository,
-      const Option<std::string>& tag,
-      const Option<std::string>& id) = 0;
+  virtual process::Future<std::string> discover(const std::string& name) = 0;
 };
 
 
@@ -51,7 +48,7 @@ class LocalDiscovery : public Discovery
 public:
   static Try<process::Owned<Discovery>> create(const Flags& flags);
 
-  virtual process::Future<std::string> discover(const string& name);
+  virtual process::Future<std::string> discover(const std::string& name);
 
 private:
   LocalDiscovery(const Flags& _flags)
