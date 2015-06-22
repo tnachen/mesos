@@ -64,11 +64,11 @@ struct DockerLayer {
 
   DockerLayer() {}
 
-  std::string hash;
-  JSON::Object manifest;
-  std::string path;
-  std::string version;
-  Option<process::Shared<DockerLayer>> parent;
+  const std::string hash;
+  const JSON::Object manifest;
+  const std::string path;
+  const std::string version;
+  const Option<process::Shared<DockerLayer>> parent;
 };
 
 
@@ -91,8 +91,8 @@ struct DockerImage
 
   DockerImage() {}
 
-  std::string name;
-  Option<process::Shared<DockerLayer>> layer;
+  const std::string name;
+  const Option<process::Shared<DockerLayer>> layer;
 };
 
 
