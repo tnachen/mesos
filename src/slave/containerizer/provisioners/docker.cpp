@@ -45,6 +45,7 @@ using mesos::slave::ExecutorRunState;
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace docker {
 
 
 Try<Owned<Provisioner>> DockerProvisioner::create(
@@ -271,6 +272,7 @@ Future<Nothing> DockerProvisionerProcess::destroy(
   */
 }
 
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

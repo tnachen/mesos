@@ -42,6 +42,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace docker {
 
 // Forward declarations.
 class Backend;
@@ -165,6 +166,7 @@ private:
   process::Owned<Backend> backend;
 };
 
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

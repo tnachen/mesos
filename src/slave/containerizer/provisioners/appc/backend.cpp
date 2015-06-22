@@ -37,6 +37,7 @@ using std::vector;
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 Try<Owned<Backend>> Backend::create(const Flags& flags)
 {
@@ -182,6 +183,7 @@ Future<Nothing> CopyBackendProcess::destroy(const string& directory)
       });
 }
 
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

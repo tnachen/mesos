@@ -27,6 +27,8 @@
 using namespace process;
 
 using std::string;
+using mesos::internal::slave::appc::AppcProvisioner;
+using mesos::internal::slave::docker::DockerProvisioner;
 
 namespace mesos {
 namespace internal {
@@ -51,9 +53,11 @@ Try<hashmap<ContainerInfo::Image::Type, Owned<Provisioner>>>
 
       provisioners[ContainerInfo::Image::APPC] = create.get();
     } else if (type == "docker") {
-        Try<Owned<Provisioner>> create = DockerProvisioner::create(flags, fetcher);
+        Try<Owned<Provisioner>> create =
+          DockerProvisioner::create(flags, fetcher);
         if (create.isError()) {
-          return Error("Failed to create docker provisioner: " + create.error());
+          return Error("Failed to create Docker provisioner: " +
+                        create.error());
         }
 
         provisioners[ContainerInfo::Image::DOCKER] = create.get();

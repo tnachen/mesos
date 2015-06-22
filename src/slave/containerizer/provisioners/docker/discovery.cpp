@@ -28,6 +28,7 @@ using std::string;
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace docker {
 
 Try<Owned<Discovery>> Discovery::create(const Flags& flags)
 {
@@ -55,7 +56,7 @@ Future<string>LocalDiscovery::discover(const string& name)
   return path::join("file:///", flags.provisioner_local_dir, name);
 }
 
-
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

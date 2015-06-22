@@ -34,6 +34,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 // Provision a root filesystem for a container, built from the
 // specified layers.
@@ -98,6 +99,7 @@ private:
     const std::string& directory);
 };
 
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

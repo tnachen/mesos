@@ -39,6 +39,7 @@ using std::vector;
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 
 Try<Owned<Store>> Store::create(
@@ -492,6 +493,8 @@ Try<Nothing> StoreProcess::restore()
 
   return Nothing();
 }
+
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

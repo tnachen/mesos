@@ -37,6 +37,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 struct StoredImage {
   StoredImage(
@@ -144,6 +145,7 @@ private:
   Fetcher* fetcher;
 };
 
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

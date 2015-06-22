@@ -26,6 +26,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 // This is a specialized backend that may be useful for deployments
 // using large (multi-GB) single-layer images *and* where more recent
@@ -107,6 +108,7 @@ public:
   }
 };
 
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

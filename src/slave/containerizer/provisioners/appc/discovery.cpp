@@ -28,6 +28,7 @@ using std::string;
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 Try<Owned<Discovery>> Discovery::create(const Flags& flags)
 {
@@ -89,6 +90,7 @@ Future<string> SimpleDiscovery::discover(
   return path::join("http://", canonical.get() + ".aci");
 }
 
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

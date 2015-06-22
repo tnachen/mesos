@@ -31,6 +31,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace docker {
 
 class Discovery
 {
@@ -57,7 +58,7 @@ private:
   const Flags flags;
 };
 
-
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

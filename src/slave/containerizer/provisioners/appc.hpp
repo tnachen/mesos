@@ -42,6 +42,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 // Forward declarations.
 class Backend;
@@ -229,6 +230,7 @@ private:
   process::Owned<Backend> backend;
 };
 
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

@@ -31,6 +31,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 class Discovery
 {
@@ -78,7 +79,7 @@ private:
   SimpleDiscovery() {};
 };
 
-
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

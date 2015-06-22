@@ -35,6 +35,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 class SHA512
 {
@@ -122,6 +123,7 @@ private:
   }
 };
 
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

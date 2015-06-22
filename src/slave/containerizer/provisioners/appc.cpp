@@ -45,6 +45,7 @@ using mesos::slave::ExecutorRunState;
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace appc {
 
 
 Try<JSON::Object> AppcImage::parse(const std::string& value)
@@ -562,6 +563,7 @@ Future<Nothing> AppcProvisionerProcess::destroy(const ContainerID& containerId)
   return backend->destroy(base);
 }
 
+} // namespace appc {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {
