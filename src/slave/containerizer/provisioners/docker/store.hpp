@@ -37,6 +37,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace docker {
 
 
 // Forward declaration.
@@ -109,6 +110,10 @@ private:
       const std::string& stage,
       const std::string& uri);
 
+  process::Future<Nothing> untarLayer(
+      const std::string& stage,
+      const std::string& uri);
+
   process::Future<process::Shared<DockerLayer>> storeLayer(
       const std::string& stage,
       const std::string& uri);
@@ -130,6 +135,7 @@ private:
   Fetcher* fetcher;
 };
 
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

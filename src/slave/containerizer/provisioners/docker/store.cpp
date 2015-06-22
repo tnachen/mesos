@@ -41,6 +41,7 @@ using std::pair;
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace docker {
 
 
 Try<Owned<Store>> Store::create(
@@ -188,6 +189,10 @@ Future<Shared<DockerLayer>> StoreProcess::putLayer(const string& uri)
 
   return fetchLayer(uri, stage.get())
     .then(defer(self(),
+                &Self::untarLayer,
+                stage.get(),
+                uri))
+    .then(defer(self(),
                 &Self::storeLayer,
                 stage.get(),
                 uri))
@@ -226,6 +231,51 @@ Future<Nothing> StoreProcess::fetchLayer(const string& stage, const string& uri)
         LOG(INFO) << "Fetched layer '" + uri + "'";
         return Nothing();
         });
+}
+
+
+Future<Nothing> StoreProcess::untarLayer(
+    const string& stage,
+    const string& uri)
+{
+  Try<string> hash = os::basename(uri);
+  if (hash.isError()) {
+    return Failure("Failed to determine hash from layer uri: " + hash.error());
+  }
+  // Untar stage/hash/layer.tar into stage/layer/.
+  vector<string> argv = {
+    "tar",
+    "-C",
+    path::join(stage, hash.get(), "layer"),
+    "-x",
+    "-f",
+    path::join(stage, hash.get(), "layer.tar")};
+
+  Try<Subprocess> s = subprocess(
+      "tar",
+      argv,
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PATH("/dev/null"));
+
+  if (s.isError()) {
+    return Failure("Failed to create tar subprocess: " + s.error());
+  }
+
+  return s.get().status()
+    .then([=](const Option<int>& status) -> Future<Nothing> {
+        if (status.isNone()) {
+          return Failure("Failed to reap status for tar subprocess in " +
+                          stage);
+        }
+
+        if (status.isSome() && status.get() != 0) {
+          return Failure("Non-zero exit for tar subprocess: " +
+                         stringify(status.get()) + " in " + stage);
+        }
+        LOG(INFO) << "Untarred layer in " + stage;
+        return Nothing();
+      });
 }
 
 
@@ -319,7 +369,7 @@ Future<Shared<DockerLayer>> StoreProcess::entry(
   }
 
   return putLayer(parentUri.get())
-    .onAny([=](const Shared<DockerLayer>& parent) -> Shared<DockerLayer> {
+    .then([=](const Shared<DockerLayer>& parent) -> Shared<DockerLayer> {
         return Shared<DockerLayer> (new DockerLayer(
             hash.get(),
             json.get(),
@@ -352,47 +402,11 @@ Future<Option<Shared<DockerLayer>>> StoreProcess::getLayer(const string& hash)
 
 Try<Nothing> StoreProcess::restore()
 {
-  // Remove anything in staging.
-  /*
-  Try<list<string>> entries = os::ls(staging);
-  if (entries.isError()) {
-    return Error("Failed to list storage entries: " + entries.error());
-  }
-
-  foreach (const string& entry, entries.get()) {
-    const string path = path::join(staging, entry);
-
-    Try<Nothing> rm = (os::stat::isdir(path) ? os::rmdir(path) : os::rm(path));
-    if (rm.isError()) {
-      LOG(WARNING) << "Failed to remove " << path;
-    }
-  }
-
-  // Recover everything in storage.
-  entries = os::ls(storage);
-  if (entries.isError()) {
-    return Error("Failed to list storage entries: " + entries.error());
-  }
-
-  foreach (const string& entry_, entries.get()) {
-    string path = path::join(storage, entry_);
-    if (!os::stat::isdir(path)) {
-      LOG(WARNING) << "Unexpected entry in storage: " << entry_;
-      continue;
-    }
-    Try<DockerLayer> layer = putLayer(path);
-    if (image.isError()) {
-      LOG(WARNING) << "Unexpected entry in storage: " << layer.error();
-      continue;
-    }
-
-    LOG(INFO) << "Restored layer '" << layer.get().hash << "'";
-    layers[layer.get().hash] = layer.get();
-  }
-  */
+  // TODO(chenlily): implement restore
   return Nothing();
 }
 
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {
