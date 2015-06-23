@@ -189,7 +189,6 @@ Future<string> DockerProvisionerProcess::_provision(
     const ContainerID& containerId,
     const DockerImage& image)
 {
-  /*
   // Create root directory.
   string base = path::join(flags.provisioner_rootfs_dir,
                            stringify(containerId));
@@ -205,7 +204,7 @@ Future<string> DockerProvisionerProcess::_provision(
   LOG(INFO) << "Provisioning rootfs for container '" << containerId << "'"
             << " to '" << base << "'";
 
-  return backend->provision(images, base)
+  return backend->provision(image, base)
     .then([=] () -> Future<string> {
       // Bind mount the rootfs to itself so we can pivot_root. We do
       // it now so any subsequent mounts by the containerizer or
@@ -219,8 +218,6 @@ Future<string> DockerProvisionerProcess::_provision(
 
       return rootfs;
     });
-  */
-  return "";
 }
 
 
@@ -244,8 +241,6 @@ Future<DockerImage> DockerProvisionerProcess::fetch(const string& name)
 Future<Nothing> DockerProvisionerProcess::destroy(
     const ContainerID& containerId)
 {
-  return Nothing();
-  /*
   string base = path::join(flags.provisioner_rootfs_dir,
                            stringify(containerId));
 
@@ -268,8 +263,6 @@ Future<Nothing> DockerProvisionerProcess::destroy(
   }
 
   return backend->destroy(base);
-
-  */
 }
 
 } // namespace docker {

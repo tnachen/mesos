@@ -39,7 +39,6 @@ namespace internal {
 namespace slave {
 namespace docker {
 
-
 // Forward declaration.
 class StoreProcess;
 
