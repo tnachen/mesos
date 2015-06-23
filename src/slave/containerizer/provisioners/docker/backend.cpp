@@ -17,16 +17,15 @@
  * limitations under the License.
  */
 
-#include "slave/containerizer/provisioners/docker/backend.hpp"
-#include "slave/containerizer/provisioners/docker/bind_backend.hpp"
+#include <list>
+
+#include <stout/path.hpp>
 
 #include <process/collect.hpp>
 #include <process/dispatch.hpp>
 #include <process/subprocess.hpp>
 
-#include <stout/path.hpp>
-
-#include <list>
+#include "slave/containerizer/provisioners/docker/backend.hpp"
 
 using namespace process;
 
@@ -37,6 +36,7 @@ using std::vector;
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace docker {
 
 Try<Owned<Backend>> Backend::create(const Flags& flags)
 {
@@ -100,20 +100,20 @@ Future<Nothing> CopyBackendProcess::provision(
     const DockerImage& image,
     const string& directory)
 {
-  list<DockerLayer> layers;
+  list<Shared<DockerLayer>> layers;
   list<Future<Nothing>> futures{Nothing()};
 
-  Option<DockerLayer> layer = image.layer;
+  Option<Shared<DockerLayer>> layer = image.layer;
   while (layer.isSome()) {
     layers.push_front(layer.get());
-    layer = layer.get().parent;
+    layer = layer.get()->parent;
   }
 
-  foreach (const DockerLayer& layer, layers)
+  foreach (const Shared<DockerLayer>& layer, layers)
   {
     futures.push_back(
         futures.back().then(
-          defer(self(), &Self::_provision, layer, directory)));
+          defer(self(), &Self::_provision, image.name, *layer, directory)));
   }
 
   return collect(futures)
@@ -127,7 +127,7 @@ Future<Nothing> CopyBackendProcess::_provision(
   const DockerLayer& layer,
   const string& directory)
 {
-  LOG(INFO) << "Provisioning image '" << image << "' layer '" << layer.hash
+  LOG(INFO) << "Provisioning image '" << name << "' layer '" << layer.hash
             << "' to " << directory;
 
   vector<string> argv{
@@ -190,6 +190,7 @@ Future<Nothing> CopyBackendProcess::destroy(const string& directory)
       });
 }
 
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

@@ -34,6 +34,7 @@
 namespace mesos {
 namespace internal {
 namespace slave {
+namespace docker {
 
 // Provision a root filesystem for a docker container, built from the
 // specified docker layers.
@@ -94,10 +95,12 @@ public:
 
 private:
   process::Future<Nothing> _provision(
-    const DockerImage& image,
+    const std::string name,
+    const DockerLayer& layer,
     const std::string& directory);
 };
 
+} // namespace docker {
 } // namespace slave {
 } // namespace internal {
 } // namespace mesos {

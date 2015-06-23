@@ -246,7 +246,7 @@ Future<Nothing> StoreProcess::untarLayer(
   vector<string> argv = {
     "tar",
     "-C",
-    path::join(stage, hash.get(), "layer"),
+    path::join(stage, hash.get(), "rootfs"),
     "-x",
     "-f",
     path::join(stage, hash.get(), "layer.tar")};
@@ -287,7 +287,6 @@ Future<Shared<DockerLayer>> StoreProcess::storeLayer(
   if (hash.isError()) {
     return Failure("Failed to determine hash for stored layer: " +
                     hash.error());
-
   }
 
   // Rename the stage/XXX to store/hash.

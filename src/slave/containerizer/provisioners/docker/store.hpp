@@ -141,4 +141,3 @@ private:
 } // namespace mesos {
 
 #endif // __MESOS_DOCKER_STORE__
->>>>>>> Docker image store
