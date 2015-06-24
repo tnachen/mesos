@@ -620,7 +620,8 @@ Future<Nothing> MesosContainerizerProcess::provision(
 
   return provisioners[type]->provision(
       containerId,
-      executorInfo.container().mesos().image())
+      executorInfo.container().mesos().image(),
+      directory)
     .then(defer(self(),
                 &Self::_provision,
                 containerId,

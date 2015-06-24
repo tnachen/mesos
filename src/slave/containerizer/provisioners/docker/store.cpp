@@ -71,9 +71,12 @@ Store::~Store()
 }
 
 
-Future<DockerImage> Store::put(const string& uri, const string& name)
+Future<DockerImage> Store::put(
+    const string& uri,
+    const string& name,
+    const string& directory)
 {
-  return dispatch(process.get(), &StoreProcess::put, uri, name);
+  return dispatch(process.get(), &StoreProcess::put, uri, name, directory);
 }
 
 
@@ -128,17 +131,28 @@ StoreProcess::StoreProcess(
     fetcher(_fetcher) {}
 
 
-Future<DockerImage> StoreProcess::put(const string& uri, const string& name)
+Future<DockerImage> StoreProcess::put(
+    const string& uri,
+    const string& name,
+    const string& directory)
 {
-  Try<bool> isDir = os::stat::isdir(uri);
-  if (!isDir.isSome() || isDir.get() == false) {
-    return Failure("Failure image uri is not a directory " + uri);
+  string imageUri = uri;
+  if (strings::startsWith(imageUri, "file://")) {
+    imageUri = imageUri.substr(7);
+  }
+
+  Try<bool> isDir = os::stat::isdir(imageUri);
+  if (isDir.isError()) {
+    return Failure("Failed to check directory for uri '" +imageUri + "':"
+                   + isDir.error());
+  } else if (!isDir.get()) {
+    return Failure("Docker image uri '" + imageUri + "' is not a directory");
   }
 
   // Read repository json
-  Try<string> repoPath = path::join("file:///", uri, "repositories");
+  Try<string> repoPath = path::join(imageUri, "repositories");
   if (repoPath.isError()) {
-    return Failure("Failure to create path to repository: " + repoPath.error());
+    return Failure("Failed to create path to repository: " + repoPath.error());
   }
 
   Try<string> value = os::read(repoPath.get());
@@ -166,90 +180,60 @@ Future<DockerImage> StoreProcess::put(const string& uri, const string& name)
       "Failed to find layer id of image layer: " + layerId.error());
   }
 
-  Try<string> layerUri = path::join("file:///", uri, layerId.get().value);
+  Try<string> layerUri = path::join(imageUri, layerId.get().value);
   if (layerUri.isError()) {
     return Failure("Failed to create path to image layer: " + layerUri.error());
   }
 
-  return putLayer(layerUri.get())
+  return putLayer(layerUri.get(), directory)
     .then([=](const Shared<DockerLayer>& layer) -> Future<DockerImage> {
-      DockerImage image = DockerImage(name, layer);
+      DockerImage image(name, layer);
       images[name] = image;
       return image;
     });
 }
 
 
-Future<Shared<DockerLayer>> StoreProcess::putLayer(const string& uri)
-{
-  Try<string> stage = os::mkdtemp(path::join(staging, "XXXXXX"));
-  if (stage.isError()) {
-    return Failure("Failed to create staging directory: " + stage.error());
-  }
-
-  return fetchLayer(uri, stage.get())
-    .then(defer(self(),
-                &Self::untarLayer,
-                stage.get(),
-                uri))
-    .then(defer(self(),
-                &Self::storeLayer,
-                stage.get(),
-                uri))
-    .onAny([stage]() { os::rmdir(stage.get()); });
-}
-
-
-Future<Nothing> StoreProcess::fetchLayer(const string& stage, const string& uri)
-{
-  // Use the random staging name for the containerId
-  ContainerID containerId;
-  containerId.set_value(os::basename(stage).get());
-
-  // Disable caching because this is effectively done by the store.
-  CommandInfo::URI uri_;
-  uri_.set_value(uri);
-  uri_.set_extract(false);
-  uri_.set_cache(false);
-
-  CommandInfo commandInfo;
-  commandInfo.add_uris()->CopyFrom(uri_);
-
-  // The slaveId is only used for caching, which we disable, so just
-  // use "store" for it.
-  SlaveID slaveId;
-  slaveId.set_value("store");
-
-  return fetcher->fetch(
-      containerId,
-      commandInfo,
-      stage,
-      None(),
-      slaveId,
-      flags)
-    .then([=]() -> Future<Nothing> {
-        LOG(INFO) << "Fetched layer '" + uri + "'";
-        return Nothing();
-        });
-}
-
-
-Future<Nothing> StoreProcess::untarLayer(
-    const string& stage,
-    const string& uri)
+Future<Shared<DockerLayer>> StoreProcess::putLayer(
+    const string& uri,
+    const string& directory)
 {
   Try<string> hash = os::basename(uri);
   if (hash.isError()) {
-    return Failure("Failed to determine hash from layer uri: " + hash.error());
+    return Failure("Failed to determine hash for stored layer: " +
+                    hash.error());
   }
-  // Untar stage/hash/layer.tar into stage/layer/.
+
+  string store = path::join(storage, hash.get());
+
+  return storeLayer(hash.get(), store, uri, directory)
+    .then(defer(self(),
+                &Self::untarLayer,
+                store,
+                uri,
+                lambda::_1));
+}
+
+
+Future<Shared<DockerLayer>> StoreProcess::untarLayer(
+    const string& store,
+    const string& uri,
+    const Shared<DockerLayer>& layer)
+{
+  string rootFs = path::join(store, "rootfs");
+
+  if (os::exists(rootFs)) {
+    return layer;
+  }
+
+  // Untar stage/hash/layer.tar into stage/hash/rootfs.
   vector<string> argv = {
     "tar",
     "-C",
-    path::join(stage, hash.get(), "rootfs"),
+    rootFs,
     "-x",
     "-f",
-    path::join(stage, hash.get(), "layer.tar")};
+    path::join(store, "layer.tar")};
 
   Try<Subprocess> s = subprocess(
       "tar",
@@ -263,51 +247,92 @@ Future<Nothing> StoreProcess::untarLayer(
   }
 
   return s.get().status()
-    .then([=](const Option<int>& status) -> Future<Nothing> {
+    .then([=](const Option<int>& status) -> Future<Shared<DockerLayer>> {
         if (status.isNone()) {
           return Failure("Failed to reap status for tar subprocess in " +
-                          stage);
+                          store);
         }
 
         if (status.isSome() && status.get() != 0) {
           return Failure("Non-zero exit for tar subprocess: " +
-                         stringify(status.get()) + " in " + stage);
+                         stringify(status.get()) + " in " + store);
         }
-        LOG(INFO) << "Untarred layer in " + stage;
-        return Nothing();
+
+        return layer;
       });
 }
 
 
 Future<Shared<DockerLayer>> StoreProcess::storeLayer(
-    const string& stage,
-    const string& uri)
+    const string& hash,
+    const string& store,
+    const string& uri,
+    const string& directory)
 {
-  Try<string> hash = os::basename(uri);
-  if (hash.isError()) {
-    return Failure("Failed to determine hash for stored layer: " +
-                    hash.error());
-  }
-
-  // Rename the stage/XXX to store/hash.
-  // Only rename if the store directory doesn't exist.
-  string store = path::join(storage, hash.get());
-
+  // Copy the layer from uri to store/hash.
+  // Only copy if the store directory doesn't exist.
+  Future<Option<int>> status;
   if (os::exists(store)) {
     LOG(INFO) << "Layer store '" << store << "' exists, skipping rename";
+    status = 0;
   } else {
-    Try<Nothing> rename = os::rename(stage, store);
-    if (rename.isError()) {
-      return Failure("Failed to rename staged layer directory: " +
-                    rename.error());
+    Try<int> out = os::open(
+        path::join(directory, "stdout"),
+        O_WRONLY | O_CREAT | O_TRUNC | O_NONBLOCK | O_CLOEXEC,
+        S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+    if (out.isError()) {
+      return Failure("Failed to create 'stdout' file: " + out.error());
     }
+
+    // Repeat for stderr.
+    Try<int> err = os::open(
+        path::join(directory, "stderr"),
+        O_WRONLY | O_CREAT | O_TRUNC | O_NONBLOCK | O_CLOEXEC,
+        S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
+
+    if (err.isError()) {
+      os::close(out.get());
+      return Failure("Failed to create 'stderr' file: " + err.error());
+    }
+
+    vector<string> argv{
+      "cp",
+      "--archive",
+      path::join(uri, "rootfs"),
+      store
+    };
+
+    VLOG(1) << "Copying image with command: " << strings::join(" ", argv);
+
+    Try<Subprocess> s = subprocess(
+      "cp",
+      argv,
+      Subprocess::PATH("/dev/null"),
+      Subprocess::FD(out.get()),
+      Subprocess::FD(err.get()));
+
+    if (s.isError()) {
+      return Failure("Failed to create 'cp' subprocess: " + s.error());
+    }
+
+    status = s.get().status();
   }
 
-  return entry(store, uri)
-    .then([=](const Shared<DockerLayer>& layer) {
-      LOG(INFO) << "Stored layer with hash: " << hash.get();
+  return status
+    .then([=](const Option<int>& status) -> Future<Shared<DockerLayer>> {
+      if (status.isNone()) {
+        return Failure("Failed to reap subprocess to copy image");
+      } else if (status.get() != 0) {
+        return Failure("Non-zero exit from subprocess to copy image: " +
+                       stringify(status.get()));
+      }
 
-      layers[hash.get()] = layer;
+      return entry(store, uri, directory);
+    })
+    .then([=](const Shared<DockerLayer>& layer) {
+      LOG(INFO) << "Stored layer with hash: " << hash;
+      layers[hash] = layer;
 
       return layer;
     });
@@ -315,7 +340,8 @@ Future<Shared<DockerLayer>> StoreProcess::storeLayer(
 
 Future<Shared<DockerLayer>> StoreProcess::entry(
     const string& store,
-    const string& uri)
+    const string& uri,
+    const string& directory)
 {
   Result<string> realpath = os::realpath(store);
   if (realpath.isError()) {
@@ -347,7 +373,7 @@ Future<Shared<DockerLayer>> StoreProcess::entry(
 
   Result<JSON::String> parentId = json.get().find<JSON::String>("parent");
   if (parentId.isNone()) {
-    return Shared<DockerLayer> (new DockerLayer(
+    return Shared<DockerLayer>(new DockerLayer(
         hash.get(),
         json.get(),
         realpath.get(),
@@ -367,7 +393,7 @@ Future<Shared<DockerLayer>> StoreProcess::entry(
     return Failure("Failed to create parent layer uri: " + parentUri.error());
   }
 
-  return putLayer(parentUri.get())
+  return putLayer(parentUri.get(), directory)
     .then([=](const Shared<DockerLayer>& parent) -> Shared<DockerLayer> {
         return Shared<DockerLayer> (new DockerLayer(
             hash.get(),

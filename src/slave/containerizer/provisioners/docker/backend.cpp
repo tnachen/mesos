@@ -41,7 +41,7 @@ namespace docker {
 Try<Owned<Backend>> Backend::create(const Flags& flags)
 {
   hashmap<string, Try<Owned<Backend>>(*)(const Flags&)> creators{
-    {"changeset", &CopyBackend::create},
+    {"copy", &CopyBackend::create},
   };
 
   if (!creators.contains(flags.provisioner_backend)) {
@@ -133,7 +133,7 @@ Future<Nothing> CopyBackendProcess::_provision(
   vector<string> argv{
     "cp",
     "--archive",
-    path::join(layer.path, "rootfs"),
+    layer.path,
     directory
   };
 

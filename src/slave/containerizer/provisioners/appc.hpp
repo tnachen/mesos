@@ -164,7 +164,8 @@ public:
 
   virtual process::Future<std::string> provision(
       const ContainerID& containerId,
-      const ContainerInfo::Image& image);
+      const ContainerInfo::Image& image,
+      const std::string& directory);
 
   virtual process::Future<Nothing> destroy(const ContainerID& containerId);
 

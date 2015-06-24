@@ -56,7 +56,8 @@ public:
   // image.
   process::Future<DockerImage> put(
       const std::string& uri,
-      const std::string& name);
+      const std::string& name,
+      const std::string& directory);
 
   // Get image by name.
   process::Future<Option<DockerImage>> get(const std::string& name);
@@ -86,7 +87,8 @@ public:
 
   process::Future<DockerImage> put(
       const std::string& uri,
-      const std::string& name);
+      const std::string& name,
+      const std::string& directory);
 
   process::Future<Option<DockerImage>> get(const std::string& name);
 
@@ -103,24 +105,24 @@ private:
   Try<Nothing> restore();
 
   process::Future<process::Shared<DockerLayer>> putLayer(
-      const std::string& uri);
+      const std::string& uri,
+      const std::string& directory);
 
-  process::Future<Nothing> fetchLayer(
-      const std::string& stage,
-      const std::string& uri);
-
-  process::Future<Nothing> untarLayer(
-      const std::string& stage,
-      const std::string& uri);
+  process::Future<process::Shared<DockerLayer>> untarLayer(
+      const std::string& store,
+      const std::string& uri,
+      const process::Shared<DockerLayer>& layer);
 
   process::Future<process::Shared<DockerLayer>> storeLayer(
-      const std::string& stage,
-      const std::string& uri);
+      const std::string& hash,
+      const std::string& store,
+      const std::string& uri,
+      const std::string& directory);
 
   process::Future<process::Shared<DockerLayer>> entry(
       const std::string& store,
-      const std::string& uri);
-
+      const std::string& uri,
+      const std::string& directory);
 
   const Flags flags;
   const std::string staging;

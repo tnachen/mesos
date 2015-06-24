@@ -114,7 +114,8 @@ public:
 
   virtual process::Future<std::string> provision(
       const ContainerID& containerId,
-      const ContainerInfo::Image& image);
+      const ContainerInfo::Image& image,
+      const std::string& directory);
 
   virtual process::Future<Nothing> destroy(const ContainerID& containerId);
 
@@ -139,10 +140,10 @@ public:
       const std::list<mesos::slave::ExecutorRunState>& states,
       const hashset<ContainerID>& orphans);
 
-  //TODO(lily): check protobuf on this
   process::Future<std::string> provision(
       const ContainerID& containerId,
-      const ContainerInfo::Image::Docker& image);
+      const ContainerInfo::Image::Docker& image,
+      const std::string& directory);
 
   process::Future<Nothing> destroy(const ContainerID& containerId);
 
@@ -157,7 +158,9 @@ private:
       const ContainerID& containerId,
       const DockerImage& image);
 
-  process::Future<DockerImage> fetch(const std::string& name);
+  process::Future<DockerImage> fetch(
+      const std::string& name,
+      const std::string& directory);
 
   const Flags flags;
 

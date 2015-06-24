@@ -91,7 +91,8 @@ Future<Nothing> DockerProvisioner::recover(
 
 Future<string> DockerProvisioner::provision(
     const ContainerID& containerId,
-    const ContainerInfo::Image& image)
+    const ContainerInfo::Image& image,
+    const std::string& directory)
 {
   if (image.type() != ContainerInfo::Image::DOCKER) {
     return Failure("Unsupported container image type");
@@ -105,7 +106,8 @@ Future<string> DockerProvisioner::provision(
       process.get(),
       &DockerProvisionerProcess::provision,
       containerId,
-      image.docker());
+      image.docker(),
+      directory);
 }
 
 
@@ -175,9 +177,10 @@ Future<Nothing> DockerProvisionerProcess::recover(
 
 Future<string> DockerProvisionerProcess::provision(
     const ContainerID& containerId,
-    const ContainerInfo::Image::Docker& image)
+    const ContainerInfo::Image::Docker& image,
+    const string& directory)
 {
-  return fetch(image.name())
+  return fetch(image.name(), directory)
     .then(defer(self(),
                 &Self::_provision,
                 containerId,
@@ -222,7 +225,9 @@ Future<string> DockerProvisionerProcess::_provision(
 
 
 // Fetch an image and all dependencies.
-Future<DockerImage> DockerProvisionerProcess::fetch(const string& name)
+Future<DockerImage> DockerProvisionerProcess::fetch(
+    const string& name,
+    const string& directory)
 {
   return store->get(name)
     .then([=](const Option<DockerImage>& image) -> Future<DockerImage> {
@@ -232,7 +237,7 @@ Future<DockerImage> DockerProvisionerProcess::fetch(const string& name)
 
       return discovery->discover(name)
         .then([=](const string& uri) -> Future<DockerImage> {
-          return store->put(uri, name);
+            return store->put(uri, name, directory);
         });
     });
 }
