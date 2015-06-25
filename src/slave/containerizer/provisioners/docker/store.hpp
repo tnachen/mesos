@@ -108,10 +108,9 @@ private:
       const std::string& uri,
       const std::string& directory);
 
-  process::Future<process::Shared<DockerLayer>> untarLayer(
+  process::Future<Nothing> untarLayer(
       const std::string& store,
-      const std::string& uri,
-      const process::Shared<DockerLayer>& layer);
+      const std::string& uri);
 
   process::Future<process::Shared<DockerLayer>> storeLayer(
       const std::string& hash,

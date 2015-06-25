@@ -206,24 +206,27 @@ Future<Shared<DockerLayer>> StoreProcess::putLayer(
 
   string store = path::join(storage, hash.get());
 
-  return storeLayer(hash.get(), store, uri, directory)
+
+  return untarLayer(store, uri)
     .then(defer(self(),
-                &Self::untarLayer,
+                &Self::storeLayer,
+                hash.get(),
                 store,
                 uri,
-                lambda::_1));
+                directory));
 }
 
 
-Future<Shared<DockerLayer>> StoreProcess::untarLayer(
+Future<Nothing> StoreProcess::untarLayer(
     const string& store,
-    const string& uri,
-    const Shared<DockerLayer>& layer)
+    const string& uri)
 {
-  string rootFs = path::join(store, "rootfs");
+  string rootFs = path::join(uri, "rootfs");
 
   if (os::exists(rootFs)) {
-    return layer;
+    return Nothing();
+  } else {
+    os::mkdir(rootFs);
   }
 
   // Untar stage/hash/layer.tar into stage/hash/rootfs.
@@ -233,7 +236,7 @@ Future<Shared<DockerLayer>> StoreProcess::untarLayer(
     rootFs,
     "-x",
     "-f",
-    path::join(store, "layer.tar")};
+    path::join(uri, "layer.tar")};
 
   Try<Subprocess> s = subprocess(
       "tar",
@@ -247,7 +250,7 @@ Future<Shared<DockerLayer>> StoreProcess::untarLayer(
   }
 
   return s.get().status()
-    .then([=](const Option<int>& status) -> Future<Shared<DockerLayer>> {
+    .then([=](const Option<int>& status) -> Future<Nothing> {
         if (status.isNone()) {
           return Failure("Failed to reap status for tar subprocess in " +
                           store);
@@ -258,7 +261,7 @@ Future<Shared<DockerLayer>> StoreProcess::untarLayer(
                          stringify(status.get()) + " in " + store);
         }
 
-        return layer;
+        return Nothing();
       });
 }
 
@@ -356,12 +359,12 @@ Future<Shared<DockerLayer>> StoreProcess::entry(
       "Failed to determine hash for stored image: " + hash.error());
   }
 
-  Try<string> version = os::read(path::join(store, "VERSION"));
+  Try<string> version = os::read(path::join(uri, "VERSION"));
   if(version.isError()) {
     return Failure("Failed to determine version of json: " + version.error());
   }
 
-  Try<string> manifest = os::read(path::join(store, "manifest"));
+  Try<string> manifest = os::read(path::join(uri, "json"));
   if (manifest.isError()) {
     return Failure("Failed to read manifest: " + manifest.error());
   }
