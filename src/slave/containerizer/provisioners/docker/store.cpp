@@ -57,8 +57,8 @@ Try<Owned<Store>> Store::create(
 }
 
 
-Store::Store(Owned<StoreProcess> _process)
-  : process(_process)
+Store::Store(Owned<StoreProcess> process)
+  : process(process)
 {
   process::spawn(CHECK_NOTNULL(process.get()));
 }
@@ -96,20 +96,8 @@ Try<Owned<StoreProcess>> StoreProcess::create(
     const Flags& flags,
     Fetcher* fetcher)
 {
-  string staging = path::join(flags.provisioner_store_dir, "staging");
-  Try<Nothing> mkdir = os::mkdir(staging);
-  if (mkdir.isError()) {
-    return Error("Failed to create staging directory: " + mkdir.error());
-  }
-
-  string storage = path::join(flags.provisioner_store_dir, "storage");
-  mkdir = os::mkdir(storage);
-  if (mkdir.isError()) {
-    return Error("Failed to create storage directory: " + mkdir.error());
-  }
-
   Owned<StoreProcess> store =
-    Owned<StoreProcess>(new StoreProcess(flags, staging, storage, fetcher));
+    Owned<StoreProcess>(new StoreProcess(flags, fetcher));
 
   Try<Nothing> restore = store->restore();
   if (restore.isError()) {
@@ -121,14 +109,10 @@ Try<Owned<StoreProcess>> StoreProcess::create(
 
 
 StoreProcess::StoreProcess(
-    const Flags& _flags,
-    const string& _staging,
-    const string& _storage,
-    Fetcher* _fetcher)
-  : flags(_flags),
-    staging(_staging),
-    storage(_storage),
-    fetcher(_fetcher) {}
+    const Flags& flags,
+    Fetcher* fetcher)
+  : flags(flags),
+    fetcher(fetcher) {}
 
 
 Future<DockerImage> StoreProcess::put(
@@ -173,14 +157,30 @@ Future<DockerImage> StoreProcess::put(
   string repository = repoTag.get().first;
   string tag = repoTag.get().second;
 
-  Result<JSON::String> layerId =
-    json.get().find<JSON::String>(repository + "." + tag);
-  if (layerId.isError()) {
-    return Failure(
-      "Failed to find layer id of image layer: " + layerId.error());
+  Result<JSON::Object> repositoryValue =
+    json.get().find<JSON::Object>(repository);
+  if (repositoryValue.isError()) {
+    return Failure("Failed to find repository: " + repositoryValue.error());
+  } else if (repositoryValue.isNone()) {
+    return Failure("Repository '" + repository + "' is not found");
   }
 
-  Try<string> layerUri = path::join(imageUri, layerId.get().value);
+
+  JSON::Object repositoryJson = repositoryValue.get();
+
+  // We don't use JSON find here because a tag might contain a '.'.
+  std::map<string, JSON::Value>::const_iterator entry =
+    repositoryJson.values.find(tag);
+  if (entry == repositoryJson.values.end()) {
+    return Failure("Tag '" + tag + "' is not found");
+  } else if (!entry->second.is<JSON::String>()) {
+    return Failure("Tag json value expected to be JSON::String");
+  }
+
+  Try<string> layerUri = path::join(
+      imageUri,
+      entry->second.as<JSON::String>().value);
+
   if (layerUri.isError()) {
     return Failure("Failed to create path to image layer: " + layerUri.error());
   }
@@ -204,21 +204,24 @@ Future<Shared<DockerLayer>> StoreProcess::putLayer(
                     hash.error());
   }
 
-  string store = path::join(storage, hash.get());
+  if (layers.contains(hash.get())) {
+    return layers[hash.get()];
+  }
 
+  return untarLayer(uri)
+    .then([=]() {
+      return entry(uri, directory);
+    })
+    .then([=](const Shared<DockerLayer>& layer) {
+      LOG(INFO) << "Stored layer with hash: " << hash.get();
+      layers[hash.get()] = layer;
 
-  return untarLayer(store, uri)
-    .then(defer(self(),
-                &Self::storeLayer,
-                hash.get(),
-                store,
-                uri,
-                directory));
+      return layer;
+    });
 }
 
 
 Future<Nothing> StoreProcess::untarLayer(
-    const string& store,
     const string& uri)
 {
   string rootFs = path::join(uri, "rootfs");
@@ -253,12 +256,12 @@ Future<Nothing> StoreProcess::untarLayer(
     .then([=](const Option<int>& status) -> Future<Nothing> {
         if (status.isNone()) {
           return Failure("Failed to reap status for tar subprocess in " +
-                          store);
+                          uri);
         }
 
         if (status.isSome() && status.get() != 0) {
           return Failure("Non-zero exit for tar subprocess: " +
-                         stringify(status.get()) + " in " + store);
+                         stringify(status.get()) + " in " + uri);
         }
 
         return Nothing();
@@ -268,10 +271,10 @@ Future<Nothing> StoreProcess::untarLayer(
 
 Future<Shared<DockerLayer>> StoreProcess::storeLayer(
     const string& hash,
-    const string& store,
     const string& uri,
     const string& directory)
 {
+  string store = uri;
   // Copy the layer from uri to store/hash.
   // Only copy if the store directory doesn't exist.
   Future<Option<int>> status;
@@ -331,7 +334,7 @@ Future<Shared<DockerLayer>> StoreProcess::storeLayer(
                        stringify(status.get()));
       }
 
-      return entry(store, uri, directory);
+      return entry(uri, directory);
     })
     .then([=](const Shared<DockerLayer>& layer) {
       LOG(INFO) << "Stored layer with hash: " << hash;
@@ -342,11 +345,10 @@ Future<Shared<DockerLayer>> StoreProcess::storeLayer(
 }
 
 Future<Shared<DockerLayer>> StoreProcess::entry(
-    const string& store,
     const string& uri,
     const string& directory)
 {
-  Result<string> realpath = os::realpath(store);
+  Result<string> realpath = os::realpath(uri);
   if (realpath.isError()) {
     return Failure("Error in checking store path: " + realpath.error());
   } else if (realpath.isNone()) {

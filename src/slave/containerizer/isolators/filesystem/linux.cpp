@@ -236,6 +236,17 @@ Future<Option<CommandInfo>> LinuxFilesystemIsolatorProcess::prepare(
 
   // Mount the work directory into the container's rootfs.
   if (rootfs.isSome()) {
+    string containerWorkDirectory =
+      path::join(rootfs.get(), flags.sandbox_directory);
+
+    if (!os::exists(containerWorkDirectory)) {
+      Try<Nothing> mkdir = os::mkdir(containerWorkDirectory);
+      if (mkdir.isError()) {
+        return Failure("Failed to create work directory in container rootfs: "
+                       + mkdir.error());
+      }
+    }
+
     Try<Nothing> mount = fs::mount(
         directory,
         path::join(rootfs.get(), flags.sandbox_directory),

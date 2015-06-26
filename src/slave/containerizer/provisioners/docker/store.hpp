@@ -98,8 +98,6 @@ public:
 private:
   StoreProcess(
       const Flags& flags,
-      const std::string& staging,
-      const std::string& storage,
       Fetcher* fetcher);
 
   Try<Nothing> restore();
@@ -109,23 +107,18 @@ private:
       const std::string& directory);
 
   process::Future<Nothing> untarLayer(
-      const std::string& store,
       const std::string& uri);
 
   process::Future<process::Shared<DockerLayer>> storeLayer(
       const std::string& hash,
-      const std::string& store,
       const std::string& uri,
       const std::string& directory);
 
   process::Future<process::Shared<DockerLayer>> entry(
-      const std::string& store,
       const std::string& uri,
       const std::string& directory);
 
   const Flags flags;
-  const std::string staging;
-  const std::string storage;
 
   // name -> DockerImage
   hashmap<std::string, DockerImage> images;

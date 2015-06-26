@@ -1,4 +1,3 @@
-
 /**
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
@@ -133,7 +132,7 @@ Future<Nothing> CopyBackendProcess::_provision(
   vector<string> argv{
     "cp",
     "--archive",
-    layer.path,
+    path::join(layer.path, "rootfs"),
     directory
   };
 

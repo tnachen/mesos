@@ -62,8 +62,6 @@
 #include "slave/containerizer/mesos/containerizer.hpp"
 #include "slave/containerizer/mesos/launch.hpp"
 
-#include "slave/containerizer/provisioners/appc.hpp"
-
 using std::list;
 using std::map;
 using std::string;
