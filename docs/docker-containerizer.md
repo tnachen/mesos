@@ -70,3 +70,10 @@ If shell option is set to true the Docker Containerizer will run the user's comm
 The Docker containerizer supports recovering Docker containers when the slave restarts, which supports both when the slave is running in a Docker container or not.
 
 With the docker_mesos_image flag enabled, the Docker containerizer assumes the containerizer is running in a container itself and modifies the mechanism it recovers and launches docker containers accordingly.
+
+# Docker Containerizer Launch Flow
+
+The below diagram depicts the launch flow of the Docker Containerizer when either launching a container as task or launching a custom executor, and also whether the slave itself is launched in a Docker container or not.
+
+![Docker Launch Flow](images/docker_containerizer_flow.jpg?raw=true)
+
