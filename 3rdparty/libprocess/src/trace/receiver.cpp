@@ -17,7 +17,7 @@ using std::string;
 class LocalReceiverProcess : public ReceiverProcess
 {
 public:
-  LocalReceiverProcess() {};
+  LocalReceiverProcess(): ProcessBase("", true) {};
 
   virtual ~LocalReceiverProcess() {};
 
