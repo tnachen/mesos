@@ -68,7 +68,7 @@ void install(std::vector<Owned<FirewallRule>>&& rules);
 class ProcessBase : public EventVisitor
 {
 public:
-  explicit ProcessBase(const std::string& id = "");
+  explicit ProcessBase(const std::string& id = "", bool _skipTracing = false);
 
   virtual ~ProcessBase();
 
@@ -77,6 +77,10 @@ public:
   Option<trace::Span> span() const
   {
     return activeSpan;
+  }
+
+  bool skipTracing() {
+    return skipTracing_;
   }
 
 protected:
@@ -355,6 +359,8 @@ private:
   UPID pid;
 
   Option<trace::Span> activeSpan;
+
+  bool skipTracing_;
 };
 
 

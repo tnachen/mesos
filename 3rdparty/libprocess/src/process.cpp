@@ -552,7 +552,9 @@ static Message* encode(const UPID& from,
 
 static void transport(Message* message, ProcessBase* sender = NULL)
 {
-  trace::record(message, trace::MESSAGE_OUTBOUND_QUEUED);
+  if (sender == NULL || !sender->skipTracing()) {
+    trace::record(message, trace::MESSAGE_OUTBOUND_QUEUED);
+  }
 
   if (message->to.address == __address__) {
     if (message->span.isSome()) {
@@ -2442,7 +2444,9 @@ bool ProcessManager::deliver(
     Clock::update(receiver, Clock::now(sender != NULL ? sender : __process__));
   }
 
-  trace::record(event, trace::MESSAGE_INBOUND_QUEUED);
+  if (__process__ == NULL || !__process__->skipTracing()) {
+    trace::record(event, trace::MESSAGE_INBOUND_QUEUED);
+  }
 
   receiver->enqueue(event);
 
@@ -3038,7 +3042,11 @@ Future<Response> ProcessManager::__processes__(const Request&)
 }
 
 
-ProcessBase::ProcessBase(const string& id) : activeSpan(None())
+ProcessBase::ProcessBase(
+    const string& id,
+    bool _skipTracing)
+  : activeSpan(None()),
+    skipTracing_(_skipTracing)
 {
   process::initialize();
 
