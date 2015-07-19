@@ -490,7 +490,8 @@ void Clock::settle()
 
 static bool traceEnabled()
 {
-  static bool enabled = os::getenv("LIBPROCESS_TRACE_ENABLED").get("0") == "1";
+  static bool enabled =
+    os::getenv("LIBPROCESS_TRACE_ENABLED").getOrElse("0") == "1";
 
   return enabled;
 }
@@ -541,9 +542,9 @@ static Message* encode(const UPID& from,
 }
 
 
-static void transport(Message* message, ProcessBase* sender = NULL)
+static void transport(Message* message, ProcessBase* sender = NULL, bool trace = true)
 {
-  if (sender == NULL || !sender->skipTracing()) {
+  if (trace && (sender == NULL || !sender->skipTracing())) {
     trace::record(message, trace::MESSAGE_OUTBOUND_QUEUED);
   }
 
@@ -2382,7 +2383,8 @@ bool ProcessManager::deliver(
     Clock::update(receiver, Clock::now(sender != NULL ? sender : __process__));
   }
 
-  if (__process__ == NULL || !__process__->skipTracing()) {
+  if ((__process__ == NULL || !__process__->skipTracing()) &&
+      (sender == NULL || sender->skipTracing())) {
     trace::record(event, trace::MESSAGE_INBOUND_QUEUED);
   }
 
@@ -3016,14 +3018,18 @@ void ProcessBase::send(
     const UPID& to,
     const string& name,
     const char* data,
-    size_t length)
+    size_t length,
+    bool trace)
 {
   if (!to) {
     return;
   }
 
   // Encode and transport outgoing message.
-  transport(encode(pid, to, name, string(data, length), activeSpan), this);
+  transport(
+      encode(pid, to, name, string(data, length), activeSpan),
+      this,
+      trace);
 }
 
 
