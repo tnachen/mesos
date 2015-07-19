@@ -146,7 +146,8 @@ protected:
       const UPID& to,
       const std::string& name,
       const char* data = NULL,
-      size_t length = 0);
+      size_t length = 0,
+      bool trace = true);
 
   /**
    * Links with the specified `UPID`.
