@@ -114,7 +114,7 @@ public:
       Fetcher* _fetcher,
       const process::Owned<Launcher>& _launcher,
       const std::vector<process::Owned<mesos::slave::Isolator>>& _isolators)
-    : ProcessBase(ID::generate("mesos_containerizer")),
+    : ProcessBase(process::ID::generate("mesos_containerizer")),
       flags(_flags),
       local(_local),
       fetcher(_fetcher),

@@ -130,7 +130,7 @@ public:
                 const shared_ptr<Metrics> _metrics,
                 const Duration& _slavePingTimeout,
                 const size_t _maxSlavePingTimeouts)
-    : ProcessBase(process::ID::generate("slave-observer")),
+    : ProcessBase(process::ID::generate("slave-observer"), true),
       slave(_slave),
       slaveInfo(_slaveInfo),
       slaveId(_slaveId),

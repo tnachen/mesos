@@ -774,7 +774,9 @@ Future<bool> MesosContainerizerProcess::_launch(
       slaveId,
       slavePid,
       checkpoint,
-      flags);
+      flags,
+      true,
+      span());
 
   // TODO(jieyu): Consider moving this to 'executorEnvironment' and
   // consolidating with docker containerizer.

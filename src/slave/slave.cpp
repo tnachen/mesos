@@ -3172,7 +3172,7 @@ void Slave::ping(const UPID& from, bool connected)
       &Slave::pingTimeout,
       detection);
 
-  send(from, PongSlaveMessage());
+  send(from, PongSlaveMessage(), false);
 }
 
 

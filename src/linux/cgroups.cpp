@@ -1622,8 +1622,13 @@ private:
 class Destroyer : public Process<Destroyer>
 {
 public:
-  Destroyer(const string& _hierarchy, const vector<string>& _cgroups)
-    : hierarchy(_hierarchy), cgroups(_cgroups) {}
+  Destroyer(
+      const string& _hierarchy,
+      const vector<string>& _cgroups,
+      bool _freezer)
+    : hierarchy(_hierarchy),
+      cgroups(_cgroups),
+      freezer(_freezer) {}
 
   virtual ~Destroyer() {}
 
@@ -1690,6 +1695,7 @@ private:
 
   const string hierarchy;
   const vector<string> cgroups;
+  bool freezer;
   Promise<Nothing> promise;
 
   // The killer processes used to atomically kill tasks in each cgroup.
@@ -1719,23 +1725,11 @@ Future<Nothing> destroy(const string& hierarchy, const string& cgroup)
 
   // If the freezer subsystem is available, destroy the cgroups.
   Option<Error> error = verify(hierarchy, cgroup, "freezer.state");
-  if (error.isNone()) {
-    internal::Destroyer* destroyer =
-      new internal::Destroyer(hierarchy, candidates);
-    Future<Nothing> future = destroyer->future();
-    spawn(destroyer, true);
-    return future;
-  } else {
-    // Otherwise, attempt to remove the cgroups in bottom-up fashion.
-    foreach (const string& cgroup, candidates) {
-      Try<Nothing> remove = cgroups::remove(hierarchy, cgroup);
-      if (remove.isError()) {
-        return Failure(remove.error());
-      }
-    }
-  }
-
-  return Nothing();
+  internal::Destroyer* destroyer =
+    new internal::Destroyer(hierarchy, candidates, error.isNone());
+  Future<Nothing> future = destroyer->future();
+  spawn(destroyer, true);
+  return future;
 }
 
 
