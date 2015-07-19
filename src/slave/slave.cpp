@@ -3074,7 +3074,7 @@ void Slave::pingOld(const UPID& from, const string& body)
       &Slave::pingTimeout,
       detection);
 
-  send(from, "PONG");
+  send(from, "PONG", NULL, 0, false);
 }
 
 
@@ -3106,7 +3106,7 @@ void Slave::ping(const UPID& from, bool connected)
       &Slave::pingTimeout,
       detection);
 
-  send(from, PongSlaveMessage());
+  send(from, PongSlaveMessage(), false);
 }
 
 

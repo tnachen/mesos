@@ -819,7 +819,9 @@ Future<bool> MesosContainerizerProcess::_launch(
       slaveId,
       slavePid,
       checkpoint,
-      flags);
+      flags,
+      true,
+      span());
 
   // Include any enviroment variables from CommandInfo.
   foreach (const Environment::Variable& variable,

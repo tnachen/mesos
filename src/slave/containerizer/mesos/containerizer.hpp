@@ -120,7 +120,7 @@ public:
       const std::vector<process::Owned<mesos::slave::Isolator>>& _isolators,
       const hashmap<ContainerInfo::Image::Type,
                     process::Owned<Provisioner>>& _provisioners)
-    : ProcessBase(ID::generate("mesos_containerizer")),
+    : ProcessBase(process::ID::generate("mesos_containerizer")),
       flags(_flags),
       local(_local),
       fetcher(_fetcher),

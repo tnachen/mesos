@@ -20,6 +20,7 @@
 #define __POSIX_ISOLATOR_HPP__
 
 #include <process/future.hpp>
+#include <process/id.hpp>
 
 #include <stout/hashmap.hpp>
 
