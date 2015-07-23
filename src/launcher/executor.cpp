@@ -53,6 +53,10 @@
 
 #include "logging/logging.hpp"
 
+#ifdef __linux__
+#include "linux/fs.hpp"
+#endif // __linux__
+
 #include "messages/messages.hpp"
 
 #include "slave/constants.hpp"
@@ -75,7 +79,10 @@ using namespace process;
 class CommandExecutorProcess : public ProtobufProcess<CommandExecutorProcess>
 {
 public:
-  CommandExecutorProcess(Option<char**> override, const string& _healthCheckDir)
+  CommandExecutorProcess(
+      const Option<char**>& override,
+      const Option<string>& rootfs,
+      const string& _healthCheckDir)
     : launched(false),
       killed(false),
       killedByHealthCheck(false),
@@ -84,7 +91,8 @@ public:
       escalationTimeout(slave::EXECUTOR_SIGNAL_ESCALATION_TIMEOUT),
       driver(None()),
       healthCheckDir(_healthCheckDir),
-      override(override) {}
+      override(override),
+      rootfs(rootfs) {}
 
   virtual ~CommandExecutorProcess() {}
 
@@ -246,6 +254,37 @@ public:
       }
 
       os::close(pipes[1]);
+
+      // Change root to a new root, if provided.
+      if (rootfs.isSome()) {
+        cout << "Changing root to " << rootfs.get() << endl;
+
+        // Verify that rootfs is an absolute path.
+        Result<string> realpath = os::realpath(rootfs.get());
+        if (realpath.isError()) {
+          cerr << "Failed to determine if rootfs is an absolute path: "
+               << realpath.error() << endl;
+          abort();
+        } else if (realpath.isNone()) {
+          cerr << "Rootfs path does not exist" << endl;
+          abort();
+        } else if (realpath.get() != rootfs.get()) {
+          cerr << "Rootfs path is not an absolute path" << endl;
+          abort();
+        }
+
+#ifdef __linux__
+        Try<Nothing> chroot = fs::chroot::enter(rootfs.get());
+#else // For any other platform we'll just use POSIX chroot.
+        Try<Nothing> chroot = os::chroot(rootfs.get());
+#endif // __linux__
+        if (chroot.isError()) {
+          cerr << "Failed to enter chroot '" << rootfs.get()
+               << "': " << chroot.error();
+          abort();
+        }
+      }
+
 
       cout << command << endl;
 
@@ -517,15 +556,19 @@ private:
   Option<ExecutorDriver*> driver;
   string healthCheckDir;
   Option<char**> override;
+  Option<string> rootfs;
 };
 
 
 class CommandExecutor: public Executor
 {
 public:
-  CommandExecutor(Option<char**> override, string healthCheckDir)
+  CommandExecutor(
+      const Option<char**>& override,
+      const Option<string> rootfs,
+      const string& healthCheckDir)
   {
-    process = new CommandExecutorProcess(override, healthCheckDir);
+    process = new CommandExecutorProcess(override, rootfs, healthCheckDir);
     spawn(process);
   }
 
@@ -611,11 +654,18 @@ public:
         "subsequent 'argv' to be used with 'execvp'",
         false);
 
+    add(&rootfs,
+        "rootfs",
+        "Path to the container root filesystem.\n"
+        "The command and directory flags must be relative to rootfs\n"
+        "Different platforms may implement 'chroot' differently.");
+
     // TODO(nnielsen): Add 'prefix' option to enable replacing
     // 'sh -c' with user specified wrapper.
   }
 
   bool override;
+  Option<string> rootfs;
 };
 
 
@@ -652,7 +702,8 @@ int main(int argc, char** argv)
   if (path.empty()) {
     path = os::realpath(dirname(argv[0])).get();
   }
-  mesos::internal::CommandExecutor executor(override, path);
+
+  mesos::internal::CommandExecutor executor(override, flags.rootfs, path);
   mesos::MesosExecutorDriver driver(&executor);
   return driver.run() == mesos::DRIVER_STOPPED ? EXIT_SUCCESS : EXIT_FAILURE;
 }

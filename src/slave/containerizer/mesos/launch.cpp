@@ -212,36 +212,6 @@ int MesosContainerizerLaunch::execute()
     }
   }
 
-  // Change root to a new root, if provided.
-  if (flags.rootfs.isSome()) {
-    cout << "Changing root to " << flags.rootfs.get() << endl;
-
-    // Verify that rootfs is an absolute path.
-    Result<string> realpath = os::realpath(flags.rootfs.get());
-    if (realpath.isError()) {
-      cerr << "Failed to determine if rootfs is an absolute path: "
-           << realpath.error() << endl;
-      return 1;
-    } else if (realpath.isNone()) {
-      cerr << "Rootfs path does not exist" << endl;
-      return 1;
-    } else if (realpath.get() != flags.rootfs.get()) {
-      cerr << "Rootfs path is not an absolute path" << endl;
-      return 1;
-    }
-
-#ifdef __linux__
-    Try<Nothing> chroot = fs::chroot::enter(flags.rootfs.get());
-#else // For any other platform we'll just use POSIX chroot.
-    Try<Nothing> chroot = os::chroot(flags.rootfs.get());
-#endif // __linux__
-    if (chroot.isError()) {
-      cerr << "Failed to enter chroot '" << flags.rootfs.get()
-           << "': " << chroot.error();
-      return 1;
-    }
-  }
-
   // Change user if provided. Note that we do that after executing the
   // preparation commands so that those commands will be run with the
   // same privilege as the mesos-slave.
@@ -276,7 +246,7 @@ int MesosContainerizerLaunch::execute()
         "/bin/sh",
         "sh",
         "-c",
-        command.get().value().c_str(),
+        (command.get().value() + " --rootfs=" + flags.rootfs.get()).c_str(),
         (char*) NULL,
         envp());
   } else {
