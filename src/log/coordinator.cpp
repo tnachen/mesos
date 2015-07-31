@@ -50,7 +50,7 @@ public:
       size_t _quorum,
       const Shared<Replica>& _replica,
       const Shared<Network>& _network)
-    : ProcessBase(ID::generate("log-coordinator")),
+    : ProcessBase(ID::generate("log-coordinator"), false, "log"),
       quorum(_quorum),
       replica(_replica),
       network(_network),

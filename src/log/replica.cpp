@@ -150,7 +150,7 @@ private:
 
 
 ReplicaProcess::ReplicaProcess(const string& path)
-  : ProcessBase(ID::generate("log-replica")),
+  : ProcessBase(ID::generate("log-replica"), false, "log"),
     begin(0),
     end(0)
 {

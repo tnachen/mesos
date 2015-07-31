@@ -50,7 +50,7 @@ public:
       const Shared<Network>& _network,
       uint64_t _proposal,
       uint64_t _position)
-    : ProcessBase(ID::generate("log-catch-up")),
+    : ProcessBase(ID::generate("log-catch-up"), false, "log"),
       quorum(_quorum),
       replica(_replica),
       network(_network),
@@ -181,7 +181,7 @@ public:
       uint64_t _proposal,
       const Interval<uint64_t>& _positions,
       const Duration& _timeout)
-    : ProcessBase(ID::generate("log-bulk-catch-up")),
+    : ProcessBase(ID::generate("log-bulk-catch-up"), false, "log"),
       quorum(_quorum),
       replica(_replica),
       network(_network),

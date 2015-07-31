@@ -51,7 +51,7 @@ public:
       const Shared<Network>& _network,
       uint64_t _proposal,
       uint64_t _position)
-    : ProcessBase(ID::generate("log-explicit-promise")),
+    : ProcessBase(ID::generate("log-explicit-promise"), false, "log"),
       quorum(_quorum),
       network(_network),
       proposal(_proposal),
@@ -232,7 +232,7 @@ public:
       size_t _quorum,
       const Shared<Network>& _network,
       uint64_t _proposal)
-    : ProcessBase(ID::generate("log-implicit-promise")),
+    : ProcessBase(ID::generate("log-implicit-promise"), false, "log"),
       quorum(_quorum),
       network(_network),
       proposal(_proposal),
@@ -371,7 +371,7 @@ public:
       const Shared<Network>& _network,
       uint64_t _proposal,
       const Action& _action)
-    : ProcessBase(ID::generate("log-write")),
+    : ProcessBase(ID::generate("log-write"), false, "log"),
       quorum(_quorum),
       network(_network),
       proposal(_proposal),
@@ -518,7 +518,7 @@ public:
       const Shared<Network>& _network,
       uint64_t _proposal,
       uint64_t _position)
-    : ProcessBase(ID::generate("log-fill")),
+    : ProcessBase(ID::generate("log-fill"), false, "log"),
       quorum(_quorum),
       network(_network),
       position(_position),

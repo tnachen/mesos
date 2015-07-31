@@ -202,7 +202,7 @@ LogProcess::LogProcess(
     const string& path,
     const set<UPID>& pids,
     bool _autoInitialize)
-  : ProcessBase(ID::generate("log")),
+  : ProcessBase(ID::generate("log"), false, "log"),
     quorum(_quorum),
     replica(new Replica(path)),
     network(new Network(pids + (UPID) replica->pid())),
@@ -218,7 +218,7 @@ LogProcess::LogProcess(
     const string& znode,
     const Option<zookeeper::Authentication>& auth,
     bool _autoInitialize)
-  : ProcessBase(ID::generate("log")),
+  : ProcessBase(ID::generate("log"), false, "log"),
     quorum(_quorum),
     replica(new Replica(path)),
     network(new ZooKeeperNetwork(
@@ -411,7 +411,7 @@ void LogProcess::discarded()
 
 
 LogReaderProcess::LogReaderProcess(Log* log)
-  : ProcessBase(ID::generate("log-reader")),
+  : ProcessBase(ID::generate("log-reader"), false, "log"),
     recovering(dispatch(log->process, &LogProcess::recover)) {}
 
 
@@ -568,7 +568,7 @@ Log::Position LogReaderProcess::position(uint64_t value)
 
 
 LogWriterProcess::LogWriterProcess(Log* log)
-  : ProcessBase(ID::generate("log-writer")),
+  : ProcessBase(ID::generate("log-writer"), false, "log"),
     quorum(log->process->quorum),
     network(log->process->network),
     recovering(dispatch(log->process, &LogProcess::recover)),

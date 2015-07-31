@@ -84,7 +84,7 @@ public:
       const Metadata::Status& _status,
       bool _autoInitialize,
       const Duration& _timeout)
-    : ProcessBase(ID::generate("log-recover-protocol")),
+    : ProcessBase(ID::generate("log-recover-protocol"), false, "log"),
       quorum(_quorum),
       network(_network),
       status(_status),
@@ -435,7 +435,7 @@ public:
       const Owned<Replica>& _replica,
       const Shared<Network>& _network,
       bool _autoInitialize)
-    : ProcessBase(ID::generate("log-recover")),
+    : ProcessBase(ID::generate("log-recover"), false, "log"),
       quorum(_quorum),
       replica(_replica),
       network(_network),
