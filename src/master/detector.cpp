@@ -118,9 +118,12 @@ class StandaloneMasterDetectorProcess
 {
 public:
   StandaloneMasterDetectorProcess()
-    : ProcessBase(ID::generate("standalone-master-detector")) {}
+    : ProcessBase(
+          ID::generate("standalone-master-detector"),
+          false,
+          "master") {}
   explicit StandaloneMasterDetectorProcess(const MasterInfo& _leader)
-    : ProcessBase(ID::generate("standalone-master-detector")),
+    : ProcessBase(ID::generate("standalone-master-detector"), false, "master"),
       leader(_leader) {}
 
   ~StandaloneMasterDetectorProcess()

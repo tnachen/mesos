@@ -130,7 +130,7 @@ public:
                 const shared_ptr<Metrics> _metrics,
                 const Duration& _slavePingTimeout,
                 const size_t _maxSlavePingTimeouts)
-    : ProcessBase(process::ID::generate("slave-observer"), true),
+    : ProcessBase(process::ID::generate("slave-observer"), true, "master"),
       slave(_slave),
       slaveInfo(_slaveInfo),
       slaveId(_slaveId),
@@ -278,7 +278,7 @@ Master::Master(
     const Option<Authorizer*>& _authorizer,
     const Option<shared_ptr<RateLimiter>>& _slaveRemovalLimiter,
     const Flags& _flags)
-  : ProcessBase("master"),
+  : ProcessBase("master", false, "master"),
     flags(_flags),
     allocator(_allocator),
     registrar(_registrar),

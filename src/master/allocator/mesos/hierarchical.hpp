@@ -70,7 +70,8 @@ public:
   HierarchicalAllocatorProcess(
       const std::function<Sorter*()>& _roleSorterFactory,
       const std::function<Sorter*()>& _frameworkSorterFactory)
-    : ProcessBase(process::ID::generate("hierarchical-allocator")),
+    : ProcessBase(
+          process::ID::generate("hierarchical-allocator"), false, "master"),
       initialized(false),
       metrics(*this),
       roleSorterFactory(_roleSorterFactory),

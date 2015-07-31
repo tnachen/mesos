@@ -84,7 +84,7 @@ class ResourceMonitorProcess : public Process<ResourceMonitorProcess>
 public:
   explicit ResourceMonitorProcess(
       const lambda::function<Future<ResourceUsage>()>& _usage)
-    : ProcessBase("monitor"),
+    : ProcessBase("monitor", false, "slave"),
       usage(_usage),
       limiter(2, Seconds(1)) {} // 2 permits per second.
 

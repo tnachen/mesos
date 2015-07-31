@@ -171,7 +171,10 @@ public:
 
 private:
   PosixCpuIsolatorProcess()
-    : ProcessBase(process::ID::generate("posix_cpu_isolator")) {}
+    : ProcessBase(
+          process::ID::generate("posix_cpu_isolator"),
+          false,
+          "slave") {}
 };
 
 
@@ -206,7 +209,10 @@ public:
 
 private:
   PosixMemIsolatorProcess()
-    : ProcessBase(process::ID::generate("posix_mem_isolator")) {}
+    : ProcessBase(
+          process::ID::generate("posix_mem_isolator"),
+          false,
+          "slave") {}
 };
 
 } // namespace slave {

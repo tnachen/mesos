@@ -262,7 +262,7 @@ private:
       const IntervalSet<uint16_t>& _managedNonEphemeralPorts,
       const process::Owned<EphemeralPortsAllocator>& _ephemeralPortsAllocator,
       const std::set<uint16_t>& _flowIDs)
-    : ProcessBase(ID::generate("port_mapping_isolator")),
+    : ProcessBase(ID::generate("port_mapping_isolator"), false, "slave"),
       flags(_flags),
       eth0(_eth0),
       lo(_lo),

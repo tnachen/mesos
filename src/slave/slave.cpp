@@ -123,7 +123,7 @@ Slave::Slave(const slave::Flags& _flags,
              StatusUpdateManager* _statusUpdateManager,
              ResourceEstimator* _resourceEstimator,
              QoSController* _qosController)
-  : ProcessBase(process::ID::generate("slave")),
+  : ProcessBase(process::ID::generate("slave"), false, "slave"),
     state(RECOVERING),
     flags(_flags),
     completedFrameworks(MAX_COMPLETED_FRAMEWORKS),

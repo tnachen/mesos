@@ -118,7 +118,8 @@ private:
 class FetcherProcess : public process::Process<FetcherProcess>
 {
 public:
-  FetcherProcess() : ProcessBase(process::ID::generate("fetcher")) {}
+  FetcherProcess()
+    : ProcessBase(process::ID::generate("fetcher"), false, "slave") {}
 
   virtual ~FetcherProcess();
 

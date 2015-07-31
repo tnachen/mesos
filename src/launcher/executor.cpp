@@ -77,7 +77,8 @@ class CommandExecutorProcess : public ProtobufProcess<CommandExecutorProcess>
 {
 public:
   CommandExecutorProcess(Option<char**> override, const string& _healthCheckDir)
-    : launched(false),
+    : ProcessBase(process::ID::generate("command-executor"), false, "executor"),
+      launched(false),
       killed(false),
       killedByHealthCheck(false),
       pid(-1),

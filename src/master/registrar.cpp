@@ -83,7 +83,7 @@ class RegistrarProcess : public Process<RegistrarProcess>
 {
 public:
   RegistrarProcess(const Flags& _flags, State* _state)
-    : ProcessBase(process::ID::generate("registrar")),
+    : ProcessBase(process::ID::generate("registrar"), false, "master"),
       metrics(*this),
       updating(false),
       flags(_flags),
