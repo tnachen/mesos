@@ -392,7 +392,7 @@ int main(int argc, char** argv)
 
   FrameworkInfo framework;
   framework.set_user(user.get());
-  framework.set_name("");
+  framework.set_name(flags.name.get());
   framework.set_checkpoint(flags.checkpoint);
 
   MesosSchedulerDriver driver(&scheduler, framework, flags.master.get());
