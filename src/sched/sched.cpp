@@ -144,7 +144,11 @@ public:
       // http://www.erlang.org/doc/reference_manual/processes.html#id84804.
       // Consider using unique PIDs throughout libprocess and relying
       // on name registration to identify the process without the PID.
-    : ProcessBase(schedulerId),
+    : ProcessBase(
+          schedulerId,
+          false,
+          "scheduler",
+          "framework_name=" + _framework.name()),
       metrics(*this),
       driver(_driver),
       scheduler(_scheduler),
