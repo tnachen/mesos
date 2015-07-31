@@ -6,6 +6,7 @@
 
 #include <process/trace/receiver.hpp>
 
+#include <stout/json.hpp>
 #include <stout/os.hpp>
 
 namespace process {
@@ -74,35 +75,36 @@ void LocalReceiverProcess::receive(
     fd = open.get();
   }
 
-  // Writing out a CSV of the trace.
-  // Schema: trace_id, name, span_id, span_parent_id, from, to,
-  //         current_time, stage.
-  std::ostringstream out;
-  out << span.traceId << ","
-      << name << ","
-      << span.id << ",";
+  JSON::Object object;
+
+  object.values["trace_id"]  = stringify(span.traceId);
+  object.values["msg_name"] = name;
+  object.values["span_id"] = stringify(span.id);
 
   if (span.parent.isSome()) {
-    out << span.parent.get();
+    object.values["span_parent"] = stringify(span.parent.get());
+  } else {
+    object.values["span_parent"] = 0;
   }
 
-  out << ",";
+  object.values["from"] = stringify(from);
+  object.values["to"] = stringify(to);
 
-  out << from << "," << to << ",";
+  object.values["duration"] = time.duration().ns();
 
-  out << time.duration().ns() << ",";
+  std::ostringstream out;
 
   switch (stage) {
     case MESSAGE_INBOUND_QUEUED:
-      out << "message_inbound_queued";
+      object.values["message_direction"] = "message_inbound_queued";
       break;
     case MESSAGE_OUTBOUND_QUEUED:
-      out << "message_outbound_queued";
+      object.values["message_direction"] = "message_outbound_queued";
       break;
   }
 
+  out << object;
   out << "\r\n";
-
   os::write(fd.get(), out.str());
 }
 
