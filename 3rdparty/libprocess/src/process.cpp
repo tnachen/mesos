@@ -568,6 +568,8 @@ static void transport(
 {
   if (trace && (sender == NULL || !sender->skipTracing())) {
     trace::record(message, trace::MESSAGE_OUTBOUND_QUEUED);
+  } else {
+    message->span = None();
   }
 
   if (message->to.address == __address__) {
@@ -575,7 +577,7 @@ static void transport(
       // A new trace span before it's delivered inbound.
       const trace::Span& span = message->span.get();
       message->span =
-        trace::Span(span.traceId, span.id);
+        trace::Span(span.traceId, span.id, span.tags);
     }
     // Local message.
     process_manager->deliver(message->to, new MessageEvent(message), sender);
@@ -2464,7 +2466,7 @@ bool ProcessManager::deliver(
   }
 
   if ((sender == NULL || !sender->skipTracing()) &&
-      receiver->skipTracing()) {
+      !receiver->skipTracing()) {
     trace::record(event, trace::MESSAGE_INBOUND_QUEUED, receiver->component);
   }
 
