@@ -71,7 +71,8 @@ public:
   explicit ProcessBase(
       const std::string& id = "",
       bool _skipTracing = false,
-      const std::string& component = "");
+      const std::string& component = "",
+      const Option<std::string>& tags = None());
 
   virtual ~ProcessBase();
 
@@ -366,6 +367,9 @@ private:
 
   bool skipTracing_;
 
+  // A list of key value pairs delimited with ';' that describe the process.
+  // (e.g: framework=foo;task=bar).
+  Option<std::string> tags;
   std::string component;
 };
 

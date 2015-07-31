@@ -142,6 +142,9 @@ public:
         const trace::Span& span = message->span.get();
         out << "Libprocess-Trace-Id: " << span.traceId << "\r\n"
             << "Libprocess-Trace-SpanId: " << span.id << "\r\n";
+        if (span.tags.isSome()) {
+            out << "Libprocess-Trace-Tags: " << span.tags.get() << "\r\n";
+        }
       }
 
       out << "Connection: Keep-Alive\r\n"

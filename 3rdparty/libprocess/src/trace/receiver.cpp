@@ -106,6 +106,27 @@ void LocalReceiverProcess::receive(
       break;
   }
 
+  // Take care of tags. First split on ";".
+  if (span.tags.isSome()) {
+    std::vector<string> tagStrings = strings::split(span.tags.get(), ";");
+
+    JSON::Array array;
+    array.values.reserve(tagStrings.size());
+
+    foreach (const string& pair, tagStrings) {
+      std::vector<string> keyValue = strings::split(pair, "=");
+      if (keyValue.size() != 2) {
+        LOG(WARNING) << "Invalid tag received: " << pair;
+        continue;
+      }
+      JSON::Object object;
+      object.values[keyValue[0]] = keyValue[1];
+      array.values.push_back(object);
+    }
+
+    object.values["tags"] = std::move(array);
+  }
+
   out << object;
   out << "\r\n";
   os::write(fd.get(), out.str());

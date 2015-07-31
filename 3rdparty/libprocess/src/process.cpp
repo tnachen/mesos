@@ -535,8 +535,9 @@ static Message* encode(const UPID& from,
                        const UPID& to,
                        const string& name,
                        const string& data = "",
-                       const Option<trace::Span>& span = None(),
-                       const Option<string>& component = None())
+                       Option<trace::Span> span = None(),
+                       const Option<string>& component = None(),
+                       const Option<string>& tags = None())
 {
   Message* message = new Message();
   message->from = from;
@@ -544,10 +545,17 @@ static Message* encode(const UPID& from,
   message->name = name;
   message->body = data;
   if (span.isNone()) {
-    message->span = sampleSpan();
-  } else {
-    message->span = span;
+    span = sampleSpan();
   }
+
+  if (span.isSome()) {
+    trace::Span newSpan = span.get();
+    if (tags.isSome()) {
+      newSpan.tags = tags;
+    }
+    message->span = newSpan;
+  }
+
   message->component = component.getOrElse("");
   return message;
 }
@@ -613,9 +621,14 @@ static Message* parse(Request* request)
   Option<trace::Span> span;
   if (traceEnabled()) {
     if (request->headers.contains("Libprocess-Trace-Id")) {
+      Option<string> tags;
+      if (request->headers.contains("Libprocess-Trace-Tags")) {
+        tags = request->headers["Libprocess-Trace-Tags"];
+      }
       span = trace::Span(
           UUID::fromString(request->headers["Libprocess-Trace-Id"]),
-          UUID::fromString(request->headers["Libprocess-Trace-SpanId"]));
+          UUID::fromString(request->headers["Libprocess-Trace-SpanId"]),
+          tags);
     } else {
       span = parentSpan();
       if (span.isNone()) {
@@ -3049,10 +3062,12 @@ Future<Response> ProcessManager::__processes__(const Request&)
 ProcessBase::ProcessBase(
     const string& id,
     bool _skipTracing,
-    const string& component)
+    const string& component,
+    const Option<std::string>& tags)
   : activeSpan(None()),
     skipTracing_(_skipTracing),
-    component(component)
+    component(component),
+    tags(tags)
 {
   process::initialize();
 
@@ -3130,7 +3145,7 @@ void ProcessBase::send(
 
   // Encode and transport outgoing message.
   transport(
-      encode(pid, to, name, string(data, length), activeSpan, component),
+      encode(pid, to, name, string(data, length), activeSpan, component, tags),
       this,
       trace);
 }
