@@ -561,7 +561,10 @@ static Message* encode(const UPID& from,
 }
 
 
-static void transport(Message* message, ProcessBase* sender = NULL, bool trace = true)
+static void transport(
+    Message* message,
+    ProcessBase* sender = NULL,
+    bool trace = true)
 {
   if (trace && (sender == NULL || !sender->skipTracing())) {
     trace::record(message, trace::MESSAGE_OUTBOUND_QUEUED);
@@ -2460,9 +2463,9 @@ bool ProcessManager::deliver(
     Clock::update(receiver, Clock::now(sender != NULL ? sender : __process__));
   }
 
-  if ((__process__ == NULL || !__process__->skipTracing()) &&
-      (sender == NULL || sender->skipTracing())) {
-    trace::record(event, trace::MESSAGE_INBOUND_QUEUED);
+  if ((sender == NULL || !sender->skipTracing()) &&
+      receiver->skipTracing()) {
+    trace::record(event, trace::MESSAGE_INBOUND_QUEUED, receiver->component);
   }
 
   receiver->enqueue(event);

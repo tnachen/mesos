@@ -46,7 +46,8 @@ protected:
 
 inline process::Future<Nothing> record(
     const Message* message,
-    const Stage& stage)
+    const Stage& stage,
+    const Option<std::string>& component = None())
 {
   if (message->span.isSome()) {
     dispatch(
@@ -58,7 +59,7 @@ inline process::Future<Nothing> record(
         message->from,
         message->to,
         stage,
-        message->component);
+        component.getOrElse(message->component));
   }
 
   return Nothing();
@@ -67,19 +68,25 @@ inline process::Future<Nothing> record(
 
 inline process::Future<Nothing> record(
     const Event* event,
-    const Stage& stage)
+    const Stage& stage,
+    const Option<std::string>& component = None())
 {
   struct TraceEventVisitor : EventVisitor
   {
-    explicit TraceEventVisitor(const Stage& _stage) : stage(_stage) {}
+    explicit TraceEventVisitor(
+        const Stage& _stage,
+        const Option<std::string>& _component)
+      : stage(_stage),
+        component(_component) {}
 
     virtual void visit(const MessageEvent& event)
     {
-      record(event.message, stage);
+      record(event.message, stage, component);
     }
 
     Stage stage;
-  } visitor(stage);
+    Option<std::string> component;
+  } visitor(stage, component);
 
   event->visit(&visitor);
 
