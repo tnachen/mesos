@@ -68,7 +68,10 @@ void install(std::vector<Owned<FirewallRule>>&& rules);
 class ProcessBase : public EventVisitor
 {
 public:
-  explicit ProcessBase(const std::string& id = "", bool _skipTracing = false);
+  explicit ProcessBase(
+      const std::string& id = "",
+      bool _skipTracing = false,
+      const std::string& component = "");
 
   virtual ~ProcessBase();
 
@@ -362,6 +365,8 @@ private:
   Option<trace::Span> activeSpan;
 
   bool skipTracing_;
+
+  std::string component;
 };
 
 

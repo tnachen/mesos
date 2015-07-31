@@ -535,7 +535,8 @@ static Message* encode(const UPID& from,
                        const UPID& to,
                        const string& name,
                        const string& data = "",
-                       const Option<trace::Span>& span = None())
+                       const Option<trace::Span>& span = None(),
+                       const Option<string>& component = None())
 {
   Message* message = new Message();
   message->from = from;
@@ -547,6 +548,7 @@ static Message* encode(const UPID& from,
   } else {
     message->span = span;
   }
+  message->component = component.getOrElse("");
   return message;
 }
 
@@ -3046,9 +3048,11 @@ Future<Response> ProcessManager::__processes__(const Request&)
 
 ProcessBase::ProcessBase(
     const string& id,
-    bool _skipTracing)
+    bool _skipTracing,
+    const string& component)
   : activeSpan(None()),
-    skipTracing_(_skipTracing)
+    skipTracing_(_skipTracing),
+    component(component)
 {
   process::initialize();
 
@@ -3126,7 +3130,7 @@ void ProcessBase::send(
 
   // Encode and transport outgoing message.
   transport(
-      encode(pid, to, name, string(data, length), activeSpan),
+      encode(pid, to, name, string(data, length), activeSpan, component),
       this,
       trace);
 }

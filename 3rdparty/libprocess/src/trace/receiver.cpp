@@ -28,7 +28,8 @@ public:
       const Time& time,
       const UPID& from,
       const UPID& to,
-      const Stage& stage);
+      const Stage& stage,
+      const string& component);
 
 private:
   Option<int> fd;
@@ -56,7 +57,8 @@ void LocalReceiverProcess::receive(
     const Time& time,
     const UPID& from,
     const UPID& to,
-    const Stage& stage)
+    const Stage& stage,
+    const string& component)
 {
   if (fd.isNone()) {
     string tracesPath =
@@ -91,6 +93,7 @@ void LocalReceiverProcess::receive(
   object.values["to"] = stringify(to);
 
   object.values["duration"] = time.duration().ns();
+  object.values["component"] = component;
 
   std::ostringstream out;
 

@@ -31,6 +31,7 @@ struct Message
   std::string body;
 
   Option<trace::Span> span;
+  std::string component;
 };
 
 } // namespace process {

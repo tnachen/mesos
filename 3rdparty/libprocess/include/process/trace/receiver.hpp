@@ -33,7 +33,8 @@ public:
     const Time& time,
     const UPID& from,
     const UPID& to,
-    const Stage& stage) = 0;
+    const Stage& stage,
+    const std::string& component) = 0;
 
 protected:
   ReceiverProcess() {};
@@ -56,7 +57,8 @@ inline process::Future<Nothing> record(
         Clock::now(),
         message->from,
         message->to,
-        stage);
+        stage,
+        message->component);
   }
 
   return Nothing();
