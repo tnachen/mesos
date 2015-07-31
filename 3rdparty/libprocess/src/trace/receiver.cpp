@@ -41,7 +41,7 @@ ReceiverProcess* ReceiverProcess::instance() {
   static Once* initialized = new Once();
 
   if (!initialized->once()) {
-    // TODO: Create receiver with modules.
+    // TODO(tnachen): Create receiver with modules.
     receiver = new LocalReceiverProcess();
     spawn(receiver);
     initialized->done();
@@ -80,7 +80,7 @@ void LocalReceiverProcess::receive(
   JSON::Object object;
 
   object.values["trace_id"]  = stringify(span.traceId);
-  object.values["msg_name"] = name;
+  object.values["message_name"] = name;
   object.values["span_id"] = stringify(span.id);
 
   if (span.parent.isSome()) {
@@ -92,17 +92,17 @@ void LocalReceiverProcess::receive(
   object.values["from"] = stringify(from);
   object.values["to"] = stringify(to);
 
-  object.values["duration"] = time.duration().ns();
+  object.values["timestamp"] = time.duration().ns();
   object.values["component"] = component;
 
   std::ostringstream out;
 
   switch (stage) {
     case MESSAGE_INBOUND_QUEUED:
-      object.values["message_direction"] = "message_inbound_queued";
+      object.values["stage"] = "message_inbound_queued";
       break;
     case MESSAGE_OUTBOUND_QUEUED:
-      object.values["message_direction"] = "message_outbound_queued";
+      object.values["stage"] = "message_outbound_queued";
       break;
   }
 
