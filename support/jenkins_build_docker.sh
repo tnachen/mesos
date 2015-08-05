@@ -20,19 +20,27 @@ cd "$MESOS_DIRECTORY"
 # Generate a random image tag.
 TAG=mesos-$(date +%s)-$RANDOM
 
-# Build the target operating system/compiler image
-OS_IMG="mesosbuild/jenkins:$OS-$COMPILER"
-docker build -t $OS_IMG support/docker/$OS-$COMPILER
+IMAGE_NAME=$OS-$COMPILER
 
-# Set a trap to delete the image on exit.
-trap "docker rmi $OS_IMG" EXIT
+# Build the target operating system/compiler image
+OS_IMG="mesosbuild/jenkins:$IMAGE_NAME"
+
+if [ -n "$EXTENSION" ]; then
+    docker build --no-cache -t $OS_IMG support/docker/$IMAGE_NAME
+    docker build -t $OS_IMG-$EXTENSION support/docker/$IMAGE_NAME-$EXTENSION
+    trap "docker rmi $OS_IMG-$EXTENSION; docker rmi $OS_IMG" EXIT
+    OS_IMG="mesosbuild/jenkins:$IMAGE_NAME-$EXTENSION"
+else
+    docker build -t $OS_IMG support/docker/$IMAGE_NAME
+    trap "docker rmi $OS_IMG" EXIT
+fi
 
 # Create the docker image containing the source code to build.
 echo "
 FROM $OS_IMG
 WORKDIR mesos
 COPY . /mesos/
-CMD bash -c -l './bootstrap && ./configure $CONFIGURATION && DISTCHECK_CONFIGURE_FLAGS=\"$CONFIGURATION\" GLOG_v=1 MESOS_VERBOSE=1 make -j8 distcheck'" > Dockerfile
+CMD bash -c -l './bootstrap && ./configure $CONFIGURATION && sudo DISTCHECK_CONFIGURE_FLAGS=\"$CONFIGURATION\" GLOG_v=1 MESOS_VERBOSE=1 make -j8 distcheck'" > Dockerfile
 
 docker build -t $TAG .
 
@@ -42,4 +50,4 @@ docker build -t $TAG .
 # Now run the image.
 # NOTE: We run in 'privileged' mode to circumvent permission issues
 # with AppArmor. See https://github.com/docker/docker/issues/7276.
-docker run --privileged $TAG
+docker run --privileged --rm $TAG
