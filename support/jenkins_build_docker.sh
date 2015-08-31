@@ -25,7 +25,7 @@ OS_IMG="mesosbuild/jenkins:$OS-$COMPILER"
 docker build -t $OS_IMG support/docker/$OS-$COMPILER
 
 # Set a trap to delete the image on exit.
-#trap "docker rmi $OS_IMG" EXIT
+trap "docker rmi $OS_IMG" EXIT
 
 # Create the docker image containing the source code to build.
 echo "
