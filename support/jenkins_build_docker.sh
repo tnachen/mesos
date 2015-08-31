@@ -22,7 +22,7 @@ TAG=mesos-$(date +%s)-$RANDOM
 
 # Build the target operating system/compiler image
 OS_IMG="mesosbuild/jenkins:$OS-$COMPILER"
-docker build -t $OS_IMG support/docker/$OS-$COMPILER
+docker build --no-cache=true -t $OS_IMG support/docker/$OS-$COMPILER
 
 # Set a trap to delete the image on exit.
 trap "docker rmi $OS_IMG" EXIT
