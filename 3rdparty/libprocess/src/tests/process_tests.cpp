@@ -40,6 +40,7 @@
 #include <process/gtest.hpp>
 #include <process/network.hpp>
 #include <process/owned.hpp>
+#include <process/parallel.hpp>
 #include <process/process.hpp>
 #include <process/run.hpp>
 #include <process/socket.hpp>
@@ -1205,6 +1206,18 @@ TEST(ProcessTest, Collect)
   // We expect them to be returned in the same order as the
   // future list that was passed in.
   EXPECT_EQ(values, future.get());
+}
+
+
+TEST(ProcessTest, Parallel)
+{
+  ASSERT_TRUE(GTEST_IS_THREADSAFE);
+
+  // First ensure an empty list functions correctly.
+  std::list<lambda::function<Future<int>()>> empty;
+  Future<std::list<int>> future = parallel(empty, 0);
+  AWAIT_ASSERT_READY(future);
+  EXPECT_TRUE(future.get().empty());
 }
 
 
