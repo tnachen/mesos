@@ -3191,6 +3191,21 @@ ExecutorInfo Slave::getExecutorInfo(
       executor.mutable_container()->CopyFrom(task.container());
     }
 
+    bool hasRootfs = task.has_container() &&
+        task.container().type() == ContainerInfo::MESOS &&
+        task.container().mesos().has_image();
+
+    if (hasRootfs) {
+      // Setup a volume from the task's image so it will be
+      // provisioned. The command executor can then chroot into that.
+      Volume* volume = executor.mutable_container()->add_volumes();
+      volume->mutable_image()->CopyFrom(task.container().mesos().image());
+      volume->set_container_path("/");
+      // Host path will be filled in by the filesystem isolator.
+
+      executor.mutable_command()->set_user("root");
+    }
+
     // Prepare an executor name which includes information on the
     // command being launched.
     string name = "(Task: " + task.task_id().value() + ") ";
@@ -3244,7 +3259,11 @@ ExecutorInfo Slave::getExecutorInfo(
           task.command().container());
     }
 
-    if (task.command().has_user()) {
+    // We skip setting the user for the command executor that has
+    // a rootfs image since we need root permissions to chroot.
+    // We assume command executor will later change to the correct
+    // user later on.
+    if (!hasRootfs && task.command().has_user()) {
       executor.mutable_command()->set_user(task.command().user());
     }
 

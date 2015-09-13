@@ -314,6 +314,7 @@ Future<bool> MesosContainerizer::launch(
   return dispatch(process.get(),
                   &MesosContainerizerProcess::launch,
                   containerId,
+                  None(),
                   executorInfo,
                   directory,
                   user,
@@ -576,33 +577,6 @@ void MesosContainerizerProcess::___recover(
 }
 
 
-Future<bool> MesosContainerizerProcess::launch(
-    const ContainerID& containerId,
-    const TaskInfo& taskInfo,
-    const ExecutorInfo& executorInfo,
-    const string& directory,
-    const Option<string>& user,
-    const SlaveID& slaveId,
-    const PID<Slave>& slavePid,
-    bool checkpoint)
-{
-  if (taskInfo.has_container()) {
-    // We return false as this containerizer does not support
-    // handling TaskInfo::ContainerInfo.
-    return false;
-  }
-
-  return launch(
-      containerId,
-      executorInfo,
-      directory,
-      user,
-      slaveId,
-      slavePid,
-      checkpoint);
-}
-
-
 // Launching an executor involves the following steps:
 // 1. Call prepare on each isolator.
 // 2. Fork the executor. The forked child is blocked from exec'ing until it has
@@ -614,6 +588,7 @@ Future<bool> MesosContainerizerProcess::launch(
 //    executor.
 Future<bool> MesosContainerizerProcess::launch(
     const ContainerID& containerId,
+    const Option<TaskInfo>& taskInfo,
     const ExecutorInfo& _executorInfo,
     const string& directory,
     const Option<string>& user,
@@ -623,6 +598,12 @@ Future<bool> MesosContainerizerProcess::launch(
 {
   if (containers_.contains(containerId)) {
     return Failure("Container already started");
+  }
+
+  if (taskInfo.isSome() &&
+      taskInfo.get().has_container() &&
+      taskInfo.get().container().type() != ContainerInfo::MESOS) {
+    return false;
   }
 
   // NOTE: We make a copy of the executor info because we may mutate
@@ -662,6 +643,7 @@ Future<bool> MesosContainerizerProcess::launch(
     .then(defer(self(),
                 &Self::_launch,
                 containerId,
+                taskInfo,
                 executorInfo,
                 directory,
                 user,
@@ -749,6 +731,7 @@ Future<Nothing> MesosContainerizerProcess::fetch(
 
 Future<bool> MesosContainerizerProcess::_launch(
     const ContainerID& containerId,
+    const Option<TaskInfo>& taskInfo,
     const ExecutorInfo& executorInfo,
     const string& directory,
     const Option<string>& user,
@@ -814,11 +797,38 @@ Future<bool> MesosContainerizerProcess::_launch(
   // Prepare the flags to pass to the launch process.
   MesosContainerizerLaunch::Flags launchFlags;
 
-  launchFlags.command = JSON::Protobuf(executorInfo.command());
+  if (taskInfo.isSome() && rootfs.isSome()) {
+    // If running the command executor and a rootfs is specified,
+    // we prepare the command executor to know the directory
+    // to chroot and chdir afterwards, the correct user to set as
+    // it was set to root in the slave::getExecutorInfo to be able
+    // to run chroot.
+    CommandInfo executorCommand = executorInfo.command();
+    string command = executorCommand.value() + " --rootfs=" +
+                     rootfs.get() + " --sandbox=" +
+                     flags.sandbox_directory;
 
-  launchFlags.directory = rootfs.isSome() ? flags.sandbox_directory : directory;
-  launchFlags.rootfs = rootfs;
-  launchFlags.user = user;
+    if (taskInfo.get().command().has_user()) {
+      // We check user from TaskInfo here again since we skipped
+      // setting the executorInfo's user earlier in getExecutorInfo.
+      command += " --user=" + taskInfo.get().command().user();
+    } else if (user.isSome()) {
+      command += " --user=" + user.get();
+    }
+
+    executorCommand.set_value(command);
+    launchFlags.command = JSON::Protobuf(executorCommand);
+    launchFlags.rootfs = None();
+    launchFlags.user = None();
+  } else {
+    launchFlags.command = JSON::Protobuf(executorInfo.command());
+    launchFlags.rootfs = rootfs;
+    launchFlags.user = user;
+  }
+
+  launchFlags.directory = (taskInfo.isNone() && rootfs.isSome()) ?
+                          flags.sandbox_directory : directory;
+
   launchFlags.pipe_read = pipes[0];
   launchFlags.pipe_write = pipes[1];
 

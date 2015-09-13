@@ -52,6 +52,10 @@
 #include "common/http.hpp"
 #include "common/status_utils.hpp"
 
+#ifdef __linux__
+#include "linux/fs.hpp"
+#endif
+
 #include "logging/logging.hpp"
 
 #include "messages/messages.hpp"
@@ -76,7 +80,12 @@ using namespace process;
 class CommandExecutorProcess : public ProtobufProcess<CommandExecutorProcess>
 {
 public:
-  CommandExecutorProcess(Option<char**> override, const string& _healthCheckDir)
+  CommandExecutorProcess(
+      const Option<char**>& override,
+      const string& _healthCheckDir,
+      const Option<string>& _sandboxDirectory,
+      const Option<string>& _rootfs,
+      const Option<string>& _user)
     : launched(false),
       killed(false),
       killedByHealthCheck(false),
@@ -85,7 +94,10 @@ public:
       escalationTimeout(slave::EXECUTOR_SIGNAL_ESCALATION_TIMEOUT),
       driver(None()),
       healthCheckDir(_healthCheckDir),
-      override(override) {}
+      override(override),
+      sandboxDirectory(_sandboxDirectory),
+      rootfs(_rootfs),
+      user(_user) {}
 
   virtual ~CommandExecutorProcess() {}
 
@@ -119,6 +131,19 @@ public:
 
       driver->sendStatusUpdate(status);
       return;
+    }
+
+    Option<Volume> rootVolume;
+    if (task.has_container()) {
+      foreach (const Volume volume, task.container().volumes()) {
+        if (volume.has_image()) {
+          if (rootVolume.isSome()) {
+            cerr << "Found multiple volumes with image!";
+            abort();
+          }
+          rootVolume = volume;
+        }
+      }
     }
 
     // Skip sanity checks for TaskInfo if override is provided since
@@ -230,6 +255,37 @@ public:
       }
 
       os::close(pipes[1]);
+
+      if (rootVolume.isSome()) {
+#ifdef __linux__
+        Try<Nothing> chroot = fs::chroot::enter(rootfs.get());
+#else // For any other platform we'll just use POSIX chroot.
+        Try<Nothing> chroot = os::chroot(rootfs.get());
+#endif // __linux__
+        if (chroot.isError()) {
+          cerr << "Failed to enter chroot '" << rootfs.get()
+               << "': " << chroot.error();
+          abort();
+        }
+      }
+
+      if (sandboxDirectory.isSome()) {
+        Try<Nothing> chdir = os::chdir(sandboxDirectory.get());
+        if (chdir.isError()) {
+          cerr << "Failed to change directory to sandbox dir '"
+               << sandboxDirectory.get() << "': " << chdir.error();
+          abort();
+        }
+      }
+
+      if (user.isSome()) {
+        Try<Nothing> su = os::su(user.get());
+        if (su.isError()) {
+          cerr << "Failed to change user to '" << user.get() << "': "
+               << su.error() << endl;
+          abort();
+        }
+      }
 
       cout << command << endl;
 
@@ -501,15 +557,24 @@ private:
   Option<ExecutorDriver*> driver;
   string healthCheckDir;
   Option<char**> override;
+  Option<string> sandboxDirectory;
+  Option<string> rootfs;
+  Option<string> user;
 };
 
 
 class CommandExecutor: public Executor
 {
 public:
-  CommandExecutor(Option<char**> override, string healthCheckDir)
+  CommandExecutor(
+      const Option<char**>& override,
+      const string& healthCheckDir,
+      const Option<string>& sandboxDirectory,
+      const Option<string>& rootfs,
+      const Option<string>& user)
   {
-    process = new CommandExecutorProcess(override, healthCheckDir);
+    process = new CommandExecutorProcess(
+        override, healthCheckDir, sandboxDirectory, rootfs, user);
     spawn(process);
   }
 
@@ -595,11 +660,28 @@ public:
         "subsequent 'argv' to be used with 'execvp'",
         false);
 
+    add(&rootfs,
+        "rootfs",
+        "The absolute path for the directory in the host where rootfs is\n"
+        "provisioned");
+
+    add(&sandbox_directory,
+        "sandbox_directory",
+        "The absolute path for the directory in the container where the\n"
+        "sandbox is mapped to");
+
+    add(&user,
+        "user",
+        "The user that the task should be running as.");
+
     // TODO(nnielsen): Add 'prefix' option to enable replacing
     // 'sh -c' with user specified wrapper.
   }
 
   bool override;
+  Option<string> rootfs;
+  Option<string> sandbox_directory;
+  Option<string> user;
 };
 
 
@@ -620,6 +702,12 @@ int main(int argc, char** argv)
     return EXIT_SUCCESS;
   }
 
+  if (flags.sandbox_directory.isSome() != flags.rootfs.isSome()) {
+    cerr << "Expect sandbox_directory and rootfs to both be empty or set"
+         << endl;
+    return EXIT_FAILURE;
+  }
+
   // After flags.load(..., &argc, &argv) all flags will have been
   // stripped from argv. Additionally, arguments after a "--"
   // terminator will be preservered in argv and it is therefore
@@ -636,7 +724,8 @@ int main(int argc, char** argv)
   string path =
     envPath.isSome() ? envPath.get()
                      : os::realpath(Path(argv[0]).dirname()).get();
-  mesos::internal::CommandExecutor executor(override, path);
+  mesos::internal::CommandExecutor executor(
+      override, path, flags.sandbox_directory, flags.rootfs, flags.user);
   mesos::MesosExecutorDriver driver(&executor);
   return driver.run() == mesos::DRIVER_STOPPED ? EXIT_SUCCESS : EXIT_FAILURE;
 }
