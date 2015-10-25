@@ -40,6 +40,8 @@
 
 #include "slave/paths.hpp"
 
+#include "slave/containerizer/mesos/mark_mounts_rslave.hpp"
+
 #include "slave/containerizer/mesos/isolators/filesystem/linux.hpp"
 
 using namespace process;
@@ -462,7 +464,10 @@ Try<string> LinuxFilesystemIsolatorProcess::script(
 
   // Make sure mounts in the container mount namespace do not
   // propagate back to the host mount namespace.
-  out << "mount --make-rslave /\n";
+  // NOTE: We cannot simply run `mount --make-rslave /`, for more info
+  // please refer to comments in mark-mounts-rslave.hpp.
+  out << path::join(flags.launcher_dir, "mesos-containerizer") << " "
+      << MesosContainerizerMarkMountsRslave::NAME << "--rootdir=/ \n";
 
   // Try to unmount work directory mounts and persistent volume mounts
   // for other containers to release the extra references to them.
