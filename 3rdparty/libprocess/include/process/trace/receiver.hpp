@@ -20,6 +20,9 @@ enum Stage
 
 namespace internal {
 
+/**
+ * Receiver records all span messages received from this libprocess.
+ */
 class ReceiverProcess : public process::Process<ReceiverProcess>
 {
 public:

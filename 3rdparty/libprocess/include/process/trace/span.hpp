@@ -9,6 +9,14 @@
 namespace process {
 namespace trace {
 
+/**
+ * A Span is a message that belongs to a trace.
+ * The Span concept is from the Google Dapper paper.
+ * A trace consists of multiple spans:
+ *                              Span D
+ * Span A -> Span B -> Span C /
+ *                            \ Span E
+ */
 struct Span
 {
   Span()

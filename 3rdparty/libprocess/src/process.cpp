@@ -48,6 +48,7 @@
 #include <memory> // TODO(benh): Replace shared_ptr with unique_ptr.
 #include <mutex>
 #include <queue>
+#include <regex>
 #include <set>
 #include <sstream>
 #include <stack>
@@ -418,6 +419,11 @@ public:
   // The /__processes__ route.
   Future<Response> __processes__(const Request&);
 
+  // The /trace route.
+  Future<Response> __trace__(const Request&);
+
+  bool filteredForTracing(Message* message);
+
 private:
   // Delegate process name to receive root HTTP requests.
   const string delegate;
@@ -445,6 +451,9 @@ private:
   // List of rules applied to all incoming HTTP requests.
   vector<Owned<firewall::FirewallRule>> firewallRules;
   std::recursive_mutex firewall_mutex;
+
+  // The regexp for filtering trace output.
+  std::string tracingFilter;
 };
 
 
@@ -566,7 +575,8 @@ static void transport(
     ProcessBase* sender = NULL,
     bool trace = true)
 {
-  if (trace && (sender == NULL || !sender->skipTracing())) {
+  if (trace && (sender == NULL || !sender->skipTracing()) &&
+      process_manager->filteredForTracing(message)) {
     trace::record(message, trace::MESSAGE_OUTBOUND_QUEUED);
   } else {
     message->span = None();
@@ -1052,6 +1062,12 @@ void initialize(const string& delegate)
     lambda::bind(&ProcessManager::__processes__, process_manager, lambda::_1);
 
   new Route("/__processes__", None(), __processes__);
+
+  // Add a route for setting a filter that reduces trace output.
+  lambda::function<Future<Response>(const Request&)> __trace__ =
+    lambda::bind(&ProcessManager::__trace__, process_manager, lambda::_1);
+
+  new Route("/__trace__", None(), __trace__);
 
   VLOG(1) << "libprocess is initialized on " << address() << " for " << cpus
           << " cpus";
@@ -2183,7 +2199,7 @@ void SocketManager::swap_implementing_socket(const Socket& from, Socket* to)
 
 
 ProcessManager::ProcessManager(const string& _delegate)
-  : delegate(_delegate)
+  : delegate(_delegate), tracingFilter(".*")
 {
   running.store(0);
 }
@@ -2465,9 +2481,11 @@ bool ProcessManager::deliver(
     Clock::update(receiver, Clock::now(sender != NULL ? sender : __process__));
   }
 
-  if ((sender == NULL || !sender->skipTracing()) &&
-      !receiver->skipTracing()) {
-    trace::record(event, trace::MESSAGE_INBOUND_QUEUED, receiver->component);
+  if ((sender == NULL || !sender->skipTracing()) && !receiver->skipTracing()) {
+    MessageEvent* messageEvent = dynamic_cast<MessageEvent *>(event);
+    if (messageEvent != NULL && filteredForTracing(messageEvent->message)) {
+      trace::record(event, trace::MESSAGE_INBOUND_QUEUED, receiver->component);
+    }
   }
 
   receiver->enqueue(event);
@@ -3061,6 +3079,34 @@ Future<Response> ProcessManager::__processes__(const Request&)
   }
 
   return OK(array);
+}
+
+
+Future<Response> ProcessManager::__trace__(const Request& request)
+{
+  if (request.method == "DELETE") {
+    tracingFilter = ".*";
+  } else if (request.method == "POST" || request.method == "PUT") {
+    Option<string> filter = request.url.query.get("filter");
+    if (filter.isNone()) {
+      return http::BadRequest("No \"filter\" parameter passed");
+    }
+
+    tracingFilter = filter.get();
+  }
+
+  return OK(tracingFilter);
+}
+
+
+bool ProcessManager::filteredForTracing(Message* message)
+{
+  std::regex filter(tracingFilter);
+
+  // TODO(bernd-mesos): multiple regexps, with logical conjunctions.
+  return regex_match(message->name, filter);
+
+  return result;
 }
 
 
