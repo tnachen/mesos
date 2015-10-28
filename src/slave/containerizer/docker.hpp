@@ -121,7 +121,10 @@ public:
       const Flags& _flags,
       Fetcher* _fetcher,
       process::Shared<Docker> _docker)
-    : ProcessBase(ID::generate("docker_containerizer"), false, "slave"),
+    : ProcessBase(
+        process::ID::generate("docker_containerizer"),
+        false,
+        "slave"),
       flags(_flags),
       fetcher(_fetcher),
       docker(_docker) {}
