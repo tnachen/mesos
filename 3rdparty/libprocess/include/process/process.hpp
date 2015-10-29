@@ -151,7 +151,8 @@ protected:
       const std::string& name,
       const char* data = NULL,
       size_t length = 0,
-      bool trace = true);
+      bool trace = true,
+      const Option<std::string>& tags = None());
 
   /**
    * Links with the specified `UPID`.

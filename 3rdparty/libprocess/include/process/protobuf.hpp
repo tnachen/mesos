@@ -113,12 +113,13 @@ protected:
 
   void send(const process::UPID& to,
             const google::protobuf::Message& message,
-            bool trace = true)
+            bool trace = true,
+            const Option<std::string>& tags = None())
   {
     std::string data;
     message.SerializeToString(&data);
     process::Process<T>::send(to, message.GetTypeName(),
-                              data.data(), data.size(), trace);
+                              data.data(), data.size(), trace, tags);
   }
 
   using process::Process<T>::send;

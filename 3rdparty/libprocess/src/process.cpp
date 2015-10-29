@@ -577,6 +577,13 @@ static void transport(
 {
   if (trace && (sender == NULL || !sender->skipTracing()) &&
       process_manager->filteredForTracing(message)) {
+    if (message->span.isSome()) {
+      // A new trace span before it's delivered outbound.
+      const trace::Span& span = message->span.get();
+      message->span =
+        trace::Span(span.traceId, span.id, span.tags);
+    }
+
     trace::record(message, trace::MESSAGE_OUTBOUND_QUEUED);
   } else {
     message->span = None();
@@ -3188,15 +3195,36 @@ void ProcessBase::send(
     const string& name,
     const char* data,
     size_t length,
-    bool trace)
+    bool trace,
+    const Option<string>& messageTags)
 {
   if (!to) {
     return;
   }
 
+  Option<string> traceTags;
+  if (tags.isSome()) {
+    traceTags = tags;
+  }
+
+  if (messageTags.isSome()) {
+    if (traceTags.isSome()) {
+      traceTags = traceTags.get() + ";" + messageTags.get();
+    } else {
+      traceTags = messageTags.get();
+    }
+  }
+
   // Encode and transport outgoing message.
   transport(
-      encode(pid, to, name, string(data, length), activeSpan, component, tags),
+      encode(
+        pid,
+        to,
+        name,
+        string(data, length),
+        activeSpan,
+        component,
+        messageTags),
       this,
       trace);
 }
