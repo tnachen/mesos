@@ -3112,8 +3112,6 @@ bool ProcessManager::filteredForTracing(Message* message)
 
   // TODO(bernd-mesos): multiple regexps, with logical conjunctions.
   return regex_match(message->name, filter);
-
-  return result;
 }
 
 
