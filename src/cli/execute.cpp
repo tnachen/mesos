@@ -110,6 +110,11 @@ public:
         "docker_image",
         "Docker image that follows the Docker CLI naming <image>:<tag>."
         "(ie: ubuntu, busybox:latest).");
+
+    add(&containerizer,
+        "containerizer",
+        "Containerizer to launch this task",
+        "mesos");
   }
 
   Option<string> master;
@@ -123,6 +128,7 @@ public:
   bool overwrite;
   bool checkpoint;
   Option<string> docker_image;
+  string containerizer;
 };
 
 
@@ -202,15 +208,32 @@ public:
           task.mutable_command()->add_uris()->set_value(uri.get());
         }
 
-        if (dockerImage.isSome()) {
-          ContainerInfo containerInfo;
-          containerInfo.set_type(ContainerInfo::DOCKER);
+        if (containerizer.get() == "docker") {
+          if (dockerImage.isSome()) {
+            ContainerInfo containerInfo;
+            containerInfo.set_type(ContainerInfo::DOCKER);
 
-          ContainerInfo::DockerInfo dockerInfo;
-          dockerInfo.set_image(dockerImage.get());
+            ContainerInfo::DockerInfo dockerInfo;
+            dockerInfo.set_image(dockerImage.get());
 
-          containerInfo.mutable_docker()->CopyFrom(dockerInfo);
-          task.mutable_container()->CopyFrom(containerInfo);
+            containerInfo.mutable_docker()->CopyFrom(dockerInfo);
+            task.mutable_container()->CopyFrom(containerInfo);
+          }
+        } else if (containerizer.get() == "mesos") {
+          if (dockerImage.isSome()) {
+            ContainerInfo containerInfo;
+            containerInfo.set_type(ContainerInfo::MESOS);
+
+            Image* image = containerInfo.mutable_mesos()->mutable_image();
+            image->set_type(Image::DOCKER);
+            image->mutable_docker()->set_name(dockerImage.get());
+
+            task.mutable_container()->CopyFrom(containerInfo);
+          }
+        } else {
+          cerr << "Unsupported containerizer: " << containerizer.get();
+          driver->abort();
+          return;
         }
 
         vector<TaskInfo> tasks;
