@@ -1999,7 +1999,15 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_NC_PortMapping)
   AWAIT_READY_FOR(statusFinished, Seconds(60));
   EXPECT_EQ(TASK_FINISHED, statusFinished.get().state());
 
-  // Now check that the proper output is in stdout.
+  Future<containerizer::Termination> termination =
+    dockerContainerizer.wait(containerId.get());
+
+  driver.stop();
+  driver.join();
+
+  AWAIT_READY(termination);
+
+    // Now check that the proper output is in stdout.
   Try<string> read = os::read(path::join(directory.get(), "stdout"));
   ASSERT_SOME(read);
 
@@ -2008,14 +2016,6 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_NC_PortMapping)
   // We expect the uuid that is sent to host port to be written
   // to stdout by the docker container running nc -l.
   EXPECT_TRUE(containsLine(lines, uuid));
-
-  Future<containerizer::Termination> termination =
-    dockerContainerizer.wait(containerId.get());
-
-  driver.stop();
-  driver.join();
-
-  AWAIT_READY(termination);
 
   Shutdown();
 }
