@@ -51,7 +51,6 @@ public:
   std::string image_provisioner_backend;
   std::string appc_store_dir;
 
-  std::string docker_auth_server;
   std::string docker_local_archives_dir;
   std::string docker_puller;
   std::string docker_puller_timeout_secs;

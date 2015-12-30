@@ -794,9 +794,7 @@ TEST_F(RegistryClientTest, SimpleGetManifest)
       server.get().address().get().hostname().get(),
       server.get().address().get().port);
 
-  Try<Owned<RegistryClient>> registryClient =
-    RegistryClient::create(url, url, None());
-
+  Try<Owned<RegistryClient>> registryClient = RegistryClient::create(url);
   ASSERT_SOME(registryClient);
 
   Future<v2::ImageManifest> manifestResponse =
@@ -967,9 +965,7 @@ TEST_F(RegistryClientTest, SimpleGetBlob)
       server.get().address().get().hostname().get(),
       server.get().address().get().port);
 
-  Try<Owned<RegistryClient>> registryClient =
-    RegistryClient::create(url, url, None());
-
+  Try<Owned<RegistryClient>> registryClient = RegistryClient::create(url);
   ASSERT_SOME(registryClient);
 
   const Path blobPath(path::join(os::getcwd(), "blob"));
@@ -1073,9 +1069,7 @@ TEST_F(RegistryClientTest, BadRequest)
       server.get().address().get().hostname().get(),
       server.get().address().get().port);
 
-  Try<Owned<RegistryClient>> registryClient =
-    RegistryClient::create(url, url, None());
-
+  Try<Owned<RegistryClient>> registryClient = RegistryClient::create(url);
   ASSERT_SOME(registryClient);
 
   const Path blobPath(path::join(os::getcwd(), "blob"));
@@ -1134,7 +1128,6 @@ TEST_F(RegistryClientTest, SimpleRegistryPuller)
   const string url = "https://" + address.hostname().get() + ":" +
                      stringify(address.port);
   flags.docker_registry = url;
-  flags.docker_auth_server = url;
 
   Try<Owned<Puller>> registryPuller = RegistryPuller::create(flags);
   ASSERT_SOME(registryPuller);

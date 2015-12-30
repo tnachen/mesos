@@ -118,11 +118,6 @@ mesos::internal::slave::Flags::Flags()
       "Directory the appc provisioner will store images in.",
       "/tmp/mesos/store/appc");
 
-  add(&Flags::docker_auth_server,
-      "docker_auth_server",
-      "Docker authentication server used to authenticate with Docker registry",
-      "https://auth.docker.io");
-
   add(&Flags::docker_local_archives_dir,
       "docker_local_archives_dir",
       "Directory for Docker local puller to look in for image archives",

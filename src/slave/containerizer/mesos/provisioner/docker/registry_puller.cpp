@@ -146,14 +146,8 @@ Try<Owned<RegistryPullerProcess>> RegistryPullerProcess::create(
     return Error("Failed to parse Docker registry: " + registryUrl.error());
   }
 
-  Try<http::URL> authServerUrl = http::URL::parse(flags.docker_auth_server);
-  if (authServerUrl.isError()) {
-    return Error("Failed to parse Docker auth server: " +
-                 authServerUrl.error());
-  }
-
   Try<Owned<RegistryClient>> registry = RegistryClient::create(
-      registryUrl.get(), authServerUrl.get());
+      registryUrl.get());
 
   if (registry.isError()) {
     return Error("Failed to create registry client: " + registry.error());
